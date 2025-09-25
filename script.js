@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let routeLayers = [], markers = [];
 
     async function geocode(place) {
-        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(place)}&boundary.country=DE`);
+        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(place)}`);
         const data = await res.json();
         if (data.features && data.features.length > 0) return data.features[0].geometry.coordinates;
         throw new Error('Location not found: ' + place);
@@ -584,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             timer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`https://api.openrouteservice.org/geocode/autocomplete?api_key=${ORS_API_KEY}&text=${encodeURIComponent(input.value)}&boundary.country=DE`);
+                    const res = await fetch(`https://api.openrouteservice.org/geocode/autocomplete?api_key=${ORS_API_KEY}&text=${encodeURIComponent(input.value)}`);
                     if (!res.ok) throw new Error('API request failed');
                     const data = await res.json();
 
