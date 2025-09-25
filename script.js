@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     forecastDays.innerHTML += `<div class="col forecast-day"><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>`;
                 }
             }
-            $('weatherLink').href = `https://www.google.com/search?q=weather+${encodeURIComponent(placeName)}`;
+            $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
             $('weatherLink').textContent = `Detailed forecast for ${placeName}`;
         } catch (err) {
             console.error(err);
@@ -510,4 +510,5 @@ document.addEventListener('DOMContentLoaded', function () {
         const m = Math.round((sec % 3600) / 60);
         return `${h}h ${m.toString().padStart(2, '0')}m`;
     }
+
 });
