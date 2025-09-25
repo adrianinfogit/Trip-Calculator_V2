@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const [tripDistance, electricDistance, fuelConsumption, electricConsumption, gasPrice, elecPrice] = inputs;
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
+    const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost');
     const splitFill = $('splitFill'), warn = $('warn');
     const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=';
 
@@ -29,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function () {
             warn.style.display = 'none';
         }
         if (d <= 0) {
-            updateDisplay(0, 0, 0, 0, 0, 0);
+            updateDisplay({ total: 0, cost_e: 0, cost_g: 0, liters: 0, kwh: 0, pct_elec: 0, cost_per_km: 0, saved: 0, dist: 0, round_trip: 0 });
             return;
         }
 
@@ -40,20 +41,36 @@ document.addEventListener('DOMContentLoaded', function () {
         const cost_elec = kwh * priceElec;
         const total = cost_gas + cost_elec;
         const pct_elec = (dElec / d) * 100;
-        updateDisplay(total, cost_elec, cost_gas, liters, kwh, pct_elec);
+
+        const cost_gas_only = (d * fuelLper100 / 100) * priceGas;
+        const saved = cost_gas_only - total;
+        const cost_per_km = total / d;
+        const round_trip = total * 2;
+
+        updateDisplay({ total, cost_e: cost_elec, cost_g: cost_gas, liters, kwh, pct_elec, cost_per_km, saved, dist: d, round_trip });
     }
 
-    function updateDisplay(total, cost_e, cost_g, liters, kwh, pct_elec) {
-        totalCost.textContent = fmt(total, true);
-        costElec.textContent = fmt(cost_e, true);
-        costGas.textContent = fmt(cost_g, true);
-        litersGas.textContent = fmt(liters) + ' L';
-        kwhElec.textContent = fmt(kwh) + ' kWh';
-        const pctE = Number.isFinite(pct_elec) ? pct_elec : 0;
+    function updateDisplay(data) {
+        totalCost.textContent = fmt(data.total, true);
+        costElec.textContent = fmt(data.cost_e, true);
+        costGas.textContent = fmt(data.cost_g, true);
+        litersGas.textContent = fmt(data.liters) + ' L';
+        kwhElec.textContent = fmt(data.kwh) + ' kWh';
+        costPerKm.textContent = fmt(data.cost_per_km, true);
+        savings.textContent = fmt(data.saved, true);
+        roundTripCost.textContent = fmt(data.round_trip, true);
+
+        const pctE = Number.isFinite(data.pct_elec) ? data.pct_elec : 0;
         const pctG = 100 - pctE;
         pctElec.textContent = pctE.toFixed(1) + '%';
         pctGas.textContent = pctG.toFixed(1) + '%';
         splitFill.style.width = Math.max(0, Math.min(100, pctE)) + '%';
+
+        if (data.dist > 0) {
+            summaryText.textContent = `Your ${Math.round(data.dist)} km trip will cost approx. ${fmt(data.total, true)}, saving you ${fmt(data.saved, true)} compared to a gasoline-only trip.`;
+        } else {
+            summaryText.textContent = '';
+        }
     }
     inputs.forEach(inp => inp.addEventListener('input', calculate));
     calculate();
@@ -297,7 +314,7 @@ document.addEventListener('DOMContentLoaded', function () {
         $('forecastDays').innerHTML = '';
         $('weatherLink').textContent = '';
         try {
-            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&current_weather=true&timezone=auto`);
+            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum,precipitation_probability_max&current_weather=true&timezone=auto`);
             const data = await res.json();
             const weatherMap = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️', 51: '🌦️', 53: '🌦️', 55: '🌦️', 61: '🌧️', 63: '🌧️', 65: '🌧️', 71: '🌨️', 73: '🌨️', 75: '🌨️', 80: '🌩️', 81: '🌩️', 82: '🌩️', 95: '⛈️' };
             if (data.current_weather) {
@@ -311,7 +328,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     const day = new Date(data.daily.time[i]).toLocaleDateString('en-GB', { weekday: 'short' });
                     const minTemp = Math.round(data.daily.temperature_2m_min[i]);
                     const maxTemp = Math.round(data.daily.temperature_2m_max[i]);
-                    forecastDays.innerHTML += `<div class="col forecast-day"><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>`;
+                    const rainAmount = data.daily.precipitation_sum[i];
+                    const rainChance = data.daily.precipitation_probability_max[i];
+
+                    let rainInfo = '';
+                    if (rainChance > 15) { // Show rain info if chance is reasonably high
+                        rainInfo = `<span class="rain-info">💧 ${rainChance}% (${rainAmount.toFixed(1)}mm)</span>`;
+                    }
+
+                    forecastDays.innerHTML += `<div class="col forecast-day"><div><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>${rainInfo || '<div>&nbsp;</div>'}</div>`;
                 }
             }
             $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
@@ -439,7 +464,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- POI ---
-    // FIX: Declare poiMap and a marker group variable in a higher scope
     let poiMap, poiMarkerGroup;
     $('showPOIBtn').addEventListener('click', () => {
         const section = $('poiSection');
@@ -451,7 +475,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!poiMap) {
                     poiMap = L.map('poiMap').setView([51.1657, 10.4515], 5);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(poiMap);
-                    // FIX: Initialize the marker group and add it to the map once
                     poiMarkerGroup = L.featureGroup().addTo(poiMap);
                 } else {
                     poiMap.invalidateSize();
@@ -481,7 +504,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const radiusM = (parseFloat($('poiRadius').value) || 5) * 1000;
         const poiCount = parseInt($('poiCount').value) || 10;
         
-        // FIX: Instead of complex iteration, just clear the dedicated marker group
         if (poiMarkerGroup) {
             poiMarkerGroup.clearLayers();
         }
@@ -530,7 +552,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                     iconAnchor: [iconWidth / 2, iconHeight]
                                 })
                             }).bindPopup(name);
-                            // FIX: Add the marker to the group, not directly to the map
                             poiMarkerGroup.addLayer(marker);
                             poiMarkers[poiId] = marker;
                         }
@@ -544,13 +565,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         poiListContainer.innerHTML = allPOIsFound ? html : 'No tourist attractions found near your stops.';
         
-        // FIX: After adding all markers, fit the map's view to the group's bounds
         if (poiMap) {
             if (Object.keys(poiMarkers).length > 0) {
-                // If we found POIs, zoom to fit them
                 poiMap.fitBounds(poiMarkerGroup.getBounds().pad(0.1));
             } else if (coords.length > 0) { 
-                // Otherwise, fall back to showing the route stops
                 const validCoords = coords.filter(c => c && c.length === 2);
                 if (validCoords.length > 0) {
                      poiMap.fitBounds(validCoords.map(c => [c[1], c[0]]));
