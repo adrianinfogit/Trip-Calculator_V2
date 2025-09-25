@@ -61,10 +61,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-    let routeLayer, markers = [];
+    let routeLayers = [], markers = [];
 
     async function geocode(place) {
-        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(place)}`);
+        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(place)}&boundary.country=DE`);
         const data = await res.json();
         if (data.features && data.features.length > 0) return data.features[0].geometry.coordinates;
         throw new Error('Location not found: ' + place);
@@ -76,37 +76,70 @@ document.addEventListener('DOMContentLoaded', function () {
         const stops = [...document.querySelectorAll('.stop-input')].map(i => i.value.trim()).filter(v => v);
         if (!depart || !destination) { alert('Enter both departure and destination'); return; }
 
+        routeLayers.forEach(l => map.removeLayer(l));
+        routeLayers = [];
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        $('alternativeRoutesInfo').innerHTML = '';
+
         try {
             const allPlaces = [depart, ...stops, destination];
             const coords = await Promise.all(allPlaces.map(geocode));
-            const body = { coordinates: coords };
+            
+            const profile = $('profile').value;
+            const preference = $('preference').value;
+            const avoidFeatures = [...document.querySelectorAll('.avoid-feature:checked')].map(cb => cb.value);
 
-            const resRoute = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+            const body = {
+                coordinates: coords,
+                preference: preference,
+                instructions: false
+            };
+
+            const directDistance = haversineDistance(coords[0], coords[coords.length - 1]);
+            const LONG_ROUTE_THRESHOLD_KM = 150; 
+            if (directDistance < LONG_ROUTE_THRESHOLD_KM) {
+                body.alternative_routes = { target_count: 3 };
+            }
+
+            if (avoidFeatures.length > 0) {
+                body.options = { avoid_features: avoidFeatures };
+            }
+
+            const resRoute = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
                 method: 'POST',
                 headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
             const json = await resRoute.json();
-
-            if (routeLayer) map.removeLayer(routeLayer);
-            markers.forEach(m => map.removeLayer(m));
-            markers = [];
+            
+            if (json.error) {
+                throw new Error(json.error.message || 'An unknown routing error occurred.');
+            }
 
             if (json.features && json.features.length > 0) {
-                const route = json.features[0];
-                const km = route.properties.summary.distance / 1000;
-                tripDistance.value = km.toFixed(1);
-                calculate();
+                const routeFeatures = json.features;
+                let combinedBounds = L.latLngBounds();
 
-                const durationSec = route.properties.summary.duration;
-                $('tripTime').textContent = formatDuration(durationSec);
+                routeFeatures.forEach((feature, index) => {
+                    const isPrimary = index === 0;
+                    const coordsLatLng = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+                    const polyline = L.polyline(coordsLatLng, {
+                        color: isPrimary ? '#0d6efd' : '#6c757d',
+                        weight: isPrimary ? 6 : 5,
+                        opacity: isPrimary ? 1.0 : 0.7,
+                        className: 'route-polyline'
+                    }).addTo(map);
 
-                const coordsLatLng = route.geometry.coordinates.map(c => [c[1], c[0]]);
-                routeLayer = L.polyline(coordsLatLng, { color: '#0d6efd', weight: 5 }).addTo(map);
-                map.fitBounds(routeLayer.getBounds());
+                    polyline.featureData = feature;
+                    routeLayers.push(polyline);
+                    combinedBounds.extend(polyline.getBounds());
+                    
+                    polyline.on('click', () => selectRoute(feature));
+                });
                 
-                fetchElevationProfile(coordsLatLng, km);
-
+                map.fitBounds(combinedBounds.pad(0.1));
+                
                 coords.forEach((c, idx) => {
                     const marker = L.marker([c[1], c[0]], {
                         icon: L.divIcon({
@@ -118,11 +151,85 @@ document.addEventListener('DOMContentLoaded', function () {
                     markers.push(marker);
                 });
 
+                selectRoute(routeFeatures[0]);
+                displayAlternativeRoutes(routeFeatures);
+                
                 const [destLon, destLat] = coords[coords.length - 1];
                 fetchWeather(destLat, destLon, destination);
-            } else { alert('No route found.'); }
-        } catch (err) { console.error(err); alert('Error: ' + err.message); }
+            } else { 
+                alert('No route found. Please check if the locations are valid and accessible.'); 
+            }
+        } catch (err) { 
+            console.error(err); 
+            alert('Error: ' + err.message); 
+        }
     });
+    
+    function selectRoute(feature) {
+        const km = feature.properties.summary.distance / 1000;
+        tripDistance.value = km.toFixed(1);
+        calculate();
+
+        const durationSec = feature.properties.summary.duration;
+        $('tripTime').textContent = formatDuration(durationSec);
+
+        const coordsLatLng = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+        fetchElevationProfile(coordsLatLng, km);
+        
+        routeLayers.forEach(layer => {
+            const isSelected = layer.featureData.properties.summary.distance === feature.properties.summary.distance;
+            layer.setStyle({
+                color: isSelected ? '#0d6efd' : '#6c757d',
+                weight: isSelected ? 6 : 5,
+                opacity: isSelected ? 1.0 : 0.7
+            });
+            if (isSelected) {
+                layer.bringToFront();
+            }
+        });
+        
+        const infoItems = document.querySelectorAll('#alternativeRoutesInfo .list-group-item');
+        infoItems.forEach((item, index) => {
+            if (routeLayers[index] && routeLayers[index].featureData.properties.summary.distance === feature.properties.summary.distance) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
+
+    function displayAlternativeRoutes(features) {
+        const container = $('alternativeRoutesInfo');
+        if (features.length <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '<h6 class="text-muted">Alternative Routes</h6><div class="list-group">';
+        features.forEach((feature, index) => {
+            const summary = feature.properties.summary;
+            const distance = (summary.distance / 1000).toFixed(1);
+            const duration = formatDuration(summary.duration);
+            const isActive = index === 0;
+            html += `
+                <a href="#" class="list-group-item list-group-item-action ${isActive ? 'active' : ''}" data-route-index="${index}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">Route ${index + 1} ${isActive ? '<small class="fw-normal">(Recommended)</small>' : ''}</h6>
+                    </div>
+                    <p class="mb-0"><strong>${distance} km</strong> / ${duration}</p>
+                </a>`;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+        
+        container.querySelectorAll('.list-group-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const index = parseInt(item.dataset.routeIndex);
+                selectRoute(features[index]);
+            });
+        });
+    }
 
     $('googleMapsBtn').addEventListener('click', () => {
         const depart = encodeURIComponent($('depart').value.trim());
@@ -205,7 +312,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     forecastDays.innerHTML += `<div class="col forecast-day"><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>`;
                 }
             }
-            $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
+            // FIX: Updated the weather link to use wetteronline.de
+            $('weatherLink').href = `https://www.wetteronline.de/wetter-suchen?search=${encodeURIComponent(placeName)}`;
             $('weatherLink').textContent = `Detailed forecast for ${placeName}`;
         } catch (err) {
             console.error(err);
@@ -235,10 +343,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if(data.results && data.results.length > 1) {
                 renderElevationChart(data.results.map(r => r.elevation), totalDistanceKm);
             } else {
-                 $('elevationProfile').textContent = 'Elevation data unavailable.';
+                 $('elevationProfile').innerHTML = '<div class="text-center text-muted">Elevation data unavailable.</div>';
             }
         } catch {
-            $('elevationProfile').textContent = 'Elevation data unavailable.';
+            $('elevationProfile').innerHTML = '<div class="text-center text-muted">Elevation data unavailable.</div>';
         }
     }
 
@@ -370,7 +478,6 @@ document.addEventListener('DOMContentLoaded', function () {
         let poiMarkers = {};
         let allPOIsFound = false;
         
-        // FIX: Define the icon properties here, making it easy to adjust size
         const iconWidth = 42;
         const iconHeight = 56;
 
@@ -403,13 +510,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             </div>`;
                         
                         if (poiMap) {
-                            // FIX: Create the icon using the correct Leaflet API method with size and anchor
                             const marker = L.marker([poiLat, poiLon], {
                                 icon: L.divIcon({ 
                                     className: 'poi-marker-icon', 
                                     html: '',
                                     iconSize: [iconWidth, iconHeight],
-                                    iconAnchor: [iconWidth / 2, iconHeight] // This is the crucial fix
+                                    iconAnchor: [iconWidth / 2, iconHeight]
                                 })
                             }).addTo(poiMap).bindPopup(name);
                             poiMarkers[poiId] = marker;
@@ -424,8 +530,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         poiListContainer.innerHTML = allPOIsFound ? html : 'No tourist attractions found near your stops.';
         
-        if (poiMap) {
-            poiMap.fitBounds(coords.map(c => [c[1], c[0]]));
+        if (poiMap && coords.length > 0) {
+            const validCoords = coords.filter(c => c && c.length === 2);
+            if (validCoords.length > 0) {
+                 poiMap.fitBounds(validCoords.map(c => [c[1], c[0]]));
+            }
         }
 
         document.querySelectorAll('.poi-list-item').forEach(item => {
@@ -454,7 +563,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             timer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`https://api.openrouteservice.org/geocode/autocomplete?api_key=${ORS_API_KEY}&text=${encodeURIComponent(input.value)}`);
+                    const res = await fetch(`https://api.openrouteservice.org/geocode/autocomplete?api_key=${ORS_API_KEY}&text=${encodeURIComponent(input.value)}&boundary.country=DE`);
                     if (!res.ok) throw new Error('API request failed');
                     const data = await res.json();
 
@@ -511,4 +620,18 @@ document.addEventListener('DOMContentLoaded', function () {
         return `${h}h ${m.toString().padStart(2, '0')}m`;
     }
 
+    function haversineDistance(coords1, coords2) {
+        const toRad = x => x * Math.PI / 180;
+        const R = 6371; // Earth's radius in km
+
+        const dLat = toRad(coords2[1] - coords1[1]);
+        const dLon = toRad(coords2[0] - coords1[0]);
+        const lat1 = toRad(coords1[1]);
+        const lat2 = toRad(coords2[1]);
+
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
 });
