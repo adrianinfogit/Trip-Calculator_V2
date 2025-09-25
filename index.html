@@ -109,19 +109,50 @@
                  <div class="card shadow-sm h-100">
                     <div class="card-body p-4">
                         <h5 class="card-title">Results</h5>
-                        
-                        <div class="d-grid gap-2 mt-3">
+                        <p id="summaryText" class="text-muted small"></p>
+
+                        <div class="d-grid gap-3 mt-3">
                             <div class="d-flex justify-content-between align-items-baseline">
                                 <span class="text-muted">Total Trip Cost</span>
-                                <span id="totalCost" class="fw-bold fs-4 text-primary">€0.00</span>
+                                <span>
+                                    <span id="totalCost" class="fw-bold fs-4 text-primary">€0.00</span>
+                                    <span class="ms-1">💰</span>
+                                </span>
+                            </div>
+                             <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Cost per km</span>
+                                 <span>
+                                    <span id="costPerKm" class="fw-bold fs-5">€0.00</span>
+                                    <span class="ms-1">📏</span>
+                                 </span>
                             </div>
                             <div class="d-flex justify-content-between align-items-baseline">
                                 <span class="text-muted">Cost of Electricity</span>
-                                <span id="costElec" class="fw-bold fs-5 text-success">€0.00</span>
+                                <span>
+                                    <span id="costElec" class="fw-bold fs-5 text-success">€0.00</span>
+                                    <span class="ms-1">⚡️</span>
+                                </span>
                             </div>
                             <div class="d-flex justify-content-between align-items-baseline">
                                 <span class="text-muted">Cost of Gasoline</span>
-                                <span id="costGas" class="fw-bold fs-5 text-warning">€0.00</span>
+                                <span>
+                                    <span id="costGas" class="fw-bold fs-5 text-warning">€0.00</span>
+                                    <span class="ms-1">⛽️</span>
+                                </span>
+                            </div>
+                             <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Savings vs. Gas-Only</span>
+                                <span>
+                                    <span id="savings" class="fw-bold fs-5 text-info">€0.00</span>
+                                    <span class="ms-1">🏦</span>
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Round Trip Cost</span>
+                                <span>
+                                    <span id="roundTripCost" class="fw-bold fs-5">€0.00</span>
+                                    <span class="ms-1">🔄</span>
+                                </span>
                             </div>
                         </div>
                         
