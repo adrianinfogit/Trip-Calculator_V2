@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
     const splitFill = $('splitFill'), warn = $('warn');
-    // FIX: Reverted API key to its original, correct value
     const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=';
 
     // --- Cost Calculation ---
@@ -315,7 +314,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     forecastDays.innerHTML += `<div class="col forecast-day"><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>`;
                 }
             }
-            $('weatherLink').href = `https://www.wetteronline.de/wetter-suchen?search=${encodeURIComponent(placeName)}`;
+            $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
             $('weatherLink').textContent = `Detailed forecast for ${placeName}`;
         } catch (err) {
             console.error(err);
@@ -440,7 +439,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- POI ---
-    let poiMap;
+    // FIX: Declare poiMap and a marker group variable in a higher scope
+    let poiMap, poiMarkerGroup;
     $('showPOIBtn').addEventListener('click', () => {
         const section = $('poiSection');
         const isVisible = section.style.display === 'none';
@@ -451,6 +451,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!poiMap) {
                     poiMap = L.map('poiMap').setView([51.1657, 10.4515], 5);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(poiMap);
+                    // FIX: Initialize the marker group and add it to the map once
+                    poiMarkerGroup = L.featureGroup().addTo(poiMap);
                 } else {
                     poiMap.invalidateSize();
                 }
@@ -479,8 +481,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const radiusM = (parseFloat($('poiRadius').value) || 5) * 1000;
         const poiCount = parseInt($('poiCount').value) || 10;
         
-        if (poiMap) {
-            poiMap.eachLayer(l => { if (l instanceof L.Marker) poiMap.removeLayer(l); });
+        // FIX: Instead of complex iteration, just clear the dedicated marker group
+        if (poiMarkerGroup) {
+            poiMarkerGroup.clearLayers();
         }
 
         let html = '';
@@ -526,7 +529,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                     iconSize: [iconWidth, iconHeight],
                                     iconAnchor: [iconWidth / 2, iconHeight]
                                 })
-                            }).addTo(poiMap).bindPopup(name);
+                            }).bindPopup(name);
+                            // FIX: Add the marker to the group, not directly to the map
+                            poiMarkerGroup.addLayer(marker);
                             poiMarkers[poiId] = marker;
                         }
                     });
@@ -539,10 +544,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
         poiListContainer.innerHTML = allPOIsFound ? html : 'No tourist attractions found near your stops.';
         
-        if (poiMap && coords.length > 0) {
-            const validCoords = coords.filter(c => c && c.length === 2);
-            if (validCoords.length > 0) {
-                 poiMap.fitBounds(validCoords.map(c => [c[1], c[0]]));
+        // FIX: After adding all markers, fit the map's view to the group's bounds
+        if (poiMap) {
+            if (Object.keys(poiMarkers).length > 0) {
+                // If we found POIs, zoom to fit them
+                poiMap.fitBounds(poiMarkerGroup.getBounds().pad(0.1));
+            } else if (coords.length > 0) { 
+                // Otherwise, fall back to showing the route stops
+                const validCoords = coords.filter(c => c && c.length === 2);
+                if (validCoords.length > 0) {
+                     poiMap.fitBounds(validCoords.map(c => [c[1], c[0]]));
+                }
             }
         }
 
