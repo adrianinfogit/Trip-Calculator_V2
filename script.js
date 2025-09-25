@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-    let routeLayers = [], markers = [];
+    let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map);
 
     async function geocode(place) {
         const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(place)}`);
@@ -98,6 +98,8 @@ document.addEventListener('DOMContentLoaded', function () {
         markers.forEach(m => map.removeLayer(m));
         markers = [];
         $('alternativeRoutesInfo').innerHTML = '';
+        poiLayer.clearLayers(); // Clear POIs when a new route is calculated
+        $('poiList').innerHTML = '';
 
         try {
             const allPlaces = [depart, ...stops, destination];
@@ -310,42 +312,81 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Weather ---
     async function fetchWeather(lat, lon, placeName) {
-        $('weatherTemperature').textContent = 'Loading...';
+        $('weatherSummary').textContent = 'Loading...';
+        $('weatherToday').innerHTML = '';
         $('forecastDays').innerHTML = '';
         $('weatherLink').textContent = '';
         try {
-            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum,precipitation_probability_max&current_weather=true&timezone=auto`);
+            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,precipitation_sum,precipitation_probability_max,windspeed_10m_max,sunrise,sunset&current_weather=true&timezone=auto`);
             const data = await res.json();
-            const weatherMap = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️', 51: '🌦️', 53: '🌦️', 55: '🌦️', 61: '🌧️', 63: '🌧️', 65: '🌧️', 71: '🌨️', 73: '🌨️', 75: '🌨️', 80: '🌩️', 81: '🌩️', 82: '🌩️', 95: '⛈️' };
-            if (data.current_weather) {
-                const weather = data.current_weather;
-                $('weatherTemperature').innerHTML = `Now: <strong>${Math.round(weather.temperature)}°C</strong> ${weatherMap[weather.weathercode] || '❓'}`;
-            }
-            if (data.daily) {
-                const forecastDays = $('forecastDays');
-                forecastDays.innerHTML = '';
-                for (let i = 0; i < 5; i++) {
-                    const day = new Date(data.daily.time[i]).toLocaleDateString('en-GB', { weekday: 'short' });
-                    const minTemp = Math.round(data.daily.temperature_2m_min[i]);
-                    const maxTemp = Math.round(data.daily.temperature_2m_max[i]);
-                    const rainAmount = data.daily.precipitation_sum[i];
-                    const rainChance = data.daily.precipitation_probability_max[i];
+            
+            const weatherCodes = { 0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Depositing rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain', 71: 'Slight snow fall', 73: 'Moderate snow fall', 75: 'Heavy snow fall', 80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers', 95: 'Thunderstorm' };
+            const weatherIcons = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️', 51: '🌦️', 53: '🌦️', 55: '🌦️', 61: '🌧️', 63: '🌧️', 65: '🌧️', 71: '🌨️', 73: '🌨️', 75: '🌨️', 80: '🌩️', 81: '🌩️', 82: '🌩️', 95: '⛈️' };
+            
+            const today = data.daily;
+            const current = data.current_weather;
+            const todayCode = current.weathercode;
+            
+            $('weatherSummary').textContent = `${weatherCodes[todayCode] || 'Weather'} expected in ${placeName}.`;
+            
+            const formatTime = (iso) => new Date(iso).toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' });
 
-                    let rainInfo = '';
-                    if (rainChance > 15) { // Show rain info if chance is reasonably high
-                        rainInfo = `<span class="rain-info">💧 ${rainChance}% (${rainAmount.toFixed(1)}mm)</span>`;
-                    }
-
-                    forecastDays.innerHTML += `<div class="col forecast-day"><div><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>${rainInfo || '<div>&nbsp;</div>'}</div>`;
+            $('weatherToday').innerHTML = `
+                <div class="weather-today-main">
+                    <div>
+                        <div class="temp">${Math.round(current.temperature)}°C</div>
+                        <div>Feels like ${Math.round(today.apparent_temperature_max[0])}°C</div>
+                    </div>
+                    <div class="icon">${weatherIcons[todayCode] || '❓'}</div>
+                </div>
+                <div class="weather-details">
+                    <div class="weather-detail-item" title="Max/Min Temp">
+                        <span>🌡️</span>
+                        <span>${Math.round(today.temperature_2m_max[0])}° / ${Math.round(today.temperature_2m_min[0])}°</span>
+                    </div>
+                    <div class="weather-detail-item" title="Precipitation">
+                        <span>💧</span>
+                        <span>${today.precipitation_probability_max[0]}% (${today.precipitation_sum[0].toFixed(1)}mm)</span>
+                    </div>
+                    <div class="weather-detail-item" title="Wind Speed">
+                        <span>💨</span>
+                        <span>${Math.round(today.windspeed_10m_max[0])} km/h</span>
+                    </div>
+                    <div class="weather-detail-item" title="Sunrise/Sunset">
+                        <span>☀️</span>
+                        <span>${formatTime(today.sunrise[0])} / ${formatTime(today.sunset[0])}</span>
+                    </div>
+                </div>
+            `;
+            
+            const forecastContainer = $('forecastDays');
+            forecastContainer.innerHTML = '';
+            for (let i = 1; i < 5; i++) {
+                const day = new Date(today.time[i]).toLocaleDateString('en-GB', { weekday: 'short' });
+                const code = today.weathercode[i];
+                let rainInfo = '';
+                if (today.precipitation_probability_max[i] > 15) {
+                    rainInfo = `<div class="rain-info">💧 ${today.precipitation_probability_max[i]}% (${today.precipitation_sum[i].toFixed(1)}mm)</div>`;
                 }
+                
+                forecastContainer.innerHTML += `
+                    <div class="col forecast-day">
+                        <div><strong>${day}</strong></div>
+                        <div class="fs-4">${weatherIcons[code] || '❓'}</div>
+                        <div>${Math.round(today.temperature_2m_max[i])}° / ${Math.round(today.temperature_2m_min[i])}°</div>
+                        ${rainInfo || '<div>&nbsp;</div>'}
+                    </div>
+                `;
             }
+
             $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
-            $('weatherLink').textContent = `Detailed forecast for ${placeName}`;
+            $('weatherLink').textContent = `Detailed hourly forecast for ${placeName}`;
         } catch (err) {
             console.error(err);
-            $('weatherTemperature').textContent = 'Weather data unavailable';
+            $('weatherSummary').textContent = 'Weather data unavailable';
         }
     }
+
     
     // --- Elevation ---
     let elevationProfileCoords = [], elevationHoverMarker = null;
@@ -464,22 +505,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- POI ---
-    let poiMap, poiMarkerGroup;
     $('showPOIBtn').addEventListener('click', () => {
         const section = $('poiSection');
         const isVisible = section.style.display === 'none';
         section.style.display = isVisible ? 'block' : 'none';
-        
-        if (isVisible) {
-            setTimeout(() => {
-                if (!poiMap) {
-                    poiMap = L.map('poiMap').setView([51.1657, 10.4515], 5);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(poiMap);
-                    poiMarkerGroup = L.featureGroup().addTo(poiMap);
-                } else {
-                    poiMap.invalidateSize();
-                }
-            }, 10);
+        if (!isVisible) {
+            poiLayer.clearLayers();
+            $('poiList').innerHTML = '';
         }
     });
 
@@ -487,9 +519,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const poiListContainer = $('poiList');
         poiListContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div> Searching...</div>';
         
+        poiLayer.clearLayers();
         const allPlaces = [$('depart').value.trim(), ...[...document.querySelectorAll('.stop-input')].map(i => i.value.trim()).filter(v => v), $('destination').value.trim()];
         if (allPlaces.length < 2 || !allPlaces[0] || !allPlaces[allPlaces.length - 1]) {
-            poiListContainer.textContent = 'Please enter a valid departure and destination.';
+            poiListContainer.textContent = 'Please calculate a route first.';
             return;
         }
 
@@ -502,59 +535,83 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const radiusM = (parseFloat($('poiRadius').value) || 5) * 1000;
-        const poiCount = parseInt($('poiCount').value) || 10;
-        
-        if (poiMarkerGroup) {
-            poiMarkerGroup.clearLayers();
+        const poiCount = parseInt($('poiCount').value) || 5;
+        const selectedCategories = [...document.querySelectorAll('.poi-category:checked')].map(cb => cb.value);
+        if (selectedCategories.length === 0) {
+            poiListContainer.textContent = 'Please select at least one category.';
+            return;
         }
+
+        const categoryQueries = {
+            museum: '[tourism=museum]',
+            historic: '[historic]',
+            viewpoint: '[tourism=viewpoint]',
+            park: '[leisure=park]'
+        };
+        const overpassQueryParts = selectedCategories.map(cat => `node${categoryQueries[cat]}(around:{{radius}},{{lat}},{{lon}});way${categoryQueries[cat]}(around:{{radius}},{{lat}},{{lon}});`);
+        const queryTemplate = `[out:json];( ${overpassQueryParts.join('')} );out center {{limit}};`;
 
         let html = '';
         let poiMarkers = {};
         let allPOIsFound = false;
         
-        const iconWidth = 42;
-        const iconHeight = 56;
+        const categoryColors = { museum: '#6f42c1', historic: '#d63384', viewpoint: '#fd7e14', park: '#198754' };
 
         for (let i = 0; i < coords.length; i++) {
             const [lon, lat] = coords[i];
-            const query = `[out:json];(node["tourism"="attraction"](around:${radiusM},${lat},${lon});way["tourism"="attraction"](around:${radiusM},${lat},${lon}););out center ${poiCount};`;
+            const finalQuery = queryTemplate.replace(/\{\{lat\}\}/g, lat).replace(/\{\{lon\}\}/g, lon).replace(/\{\{radius\}\}/g, radiusM).replace(/\{\{limit\}\}/g, poiCount);
             try {
-                const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query });
+                const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: finalQuery });
                 const data = await res.json();
 
                 if (data.elements && data.elements.length) {
                     allPOIsFound = true;
-                    html += `<h6 class="mt-3">${allPlaces[i]}</h6><div class="list-group">`;
+                    html += `<h6 class="mt-3 text-muted">Near ${allPlaces[i]}</h6><div class="list-group list-group-flush">`;
+                    
                     data.elements.forEach(poi => {
                         const name = poi.tags?.name || 'Unnamed Attraction';
                         const poiId = `${poi.type}-${poi.id}`;
+                        if(poiMarkers[poiId]) return; // Avoid duplicates
+
                         const poiLat = poi.lat || poi.center.lat;
                         const poiLon = poi.lon || poi.center.lon;
                         
-                        const gmapsUrl = `https://www.google.com/maps?q=${poiLat},${poiLon}`;
+                        const category = selectedCategories.find(cat => {
+                            const tags = Object.keys(categoryQueries[cat].replace(/\[|\]/g, '').split('='));
+                            return poi.tags[tags[0]];
+                        }) || 'attraction';
+
+                        const dist = haversineDistance([lon, lat], [poiLon, poiLat]);
 
                         html += `
                             <div class="list-group-item list-group-item-action poi-list-item" data-poi-id="${poiId}">
                                 <div class="d-flex w-100 justify-content-between">
                                     <h6 class="mb-1">${name}</h6>
+                                    <small>${dist.toFixed(1)} km</small>
                                 </div>
-                                <div class="poi-links">
-                                    <a href="${gmapsUrl}" target="_blank">Google Maps</a>
-                                </div>
+                                <div class="poi-category">${category}</div>
                             </div>`;
                         
-                        if (poiMap) {
-                            const marker = L.marker([poiLat, poiLon], {
-                                icon: L.divIcon({ 
-                                    className: 'poi-marker-icon', 
-                                    html: '',
-                                    iconSize: [iconWidth, iconHeight],
-                                    iconAnchor: [iconWidth / 2, iconHeight]
-                                })
-                            }).bindPopup(name);
-                            poiMarkerGroup.addLayer(marker);
-                            poiMarkers[poiId] = marker;
-                        }
+                        const marker = L.marker([poiLat, poiLon], {
+                            icon: L.divIcon({
+                                className: 'poi-marker-icon',
+                                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32"><path fill="${categoryColors[category] || '#E56E7F'}" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="white"/></svg>`,
+                                iconSize: [32, 32],
+                                iconAnchor: [16, 32]
+                            })
+                        }).bindPopup(`<b>${name}</b><br>${category}`);
+                        
+                        marker.on('click', () => {
+                            document.querySelectorAll('.poi-list-item').forEach(el => el.classList.remove('active'));
+                            const listItem = document.querySelector(`.poi-list-item[data-poi-id="${poiId}"]`);
+                            if(listItem) {
+                                listItem.classList.add('active');
+                                listItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        });
+
+                        poiLayer.addLayer(marker);
+                        poiMarkers[poiId] = marker;
                     });
                     html += '</div>';
                 }
@@ -563,32 +620,22 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        poiListContainer.innerHTML = allPOIsFound ? html : 'No tourist attractions found near your stops.';
+        poiListContainer.innerHTML = allPOIsFound ? html : '<div class="text-center text-muted mt-3">No attractions found for the selected categories.</div>';
         
-        if (poiMap) {
-            if (Object.keys(poiMarkers).length > 0) {
-                poiMap.fitBounds(poiMarkerGroup.getBounds().pad(0.1));
-            } else if (coords.length > 0) { 
-                const validCoords = coords.filter(c => c && c.length === 2);
-                if (validCoords.length > 0) {
-                     poiMap.fitBounds(validCoords.map(c => [c[1], c[0]]));
-                }
-            }
-        }
-
         document.querySelectorAll('.poi-list-item').forEach(item => {
             const poiId = item.dataset.poiId;
             const marker = poiMarkers[poiId];
             if (!marker) return;
 
-            item.addEventListener('mouseenter', () => {
-                marker._icon.classList.add('poi-marker-highlight');
-            });
-            item.addEventListener('mouseleave', () => {
-                marker._icon.classList.remove('poi-marker-highlight');
+            item.addEventListener('click', () => {
+                map.setView(marker.getLatLng(), 15);
+                marker.openPopup();
+                document.querySelectorAll('.poi-list-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
             });
         });
     });
+
 
     // --- Autocomplete ---
     function setupAutocomplete(input) {
