@@ -202,9 +202,10 @@
                     <div class="card-body p-4">
                         <h5 class="card-title mb-3">Destination Weather</h5>
                         <div id="weather">
-                           <p id="weatherTemperature" class="text-muted">Calculate a route to see weather.</p>
-                           <div id="forecastDays" class="row g-2"></div>
-                           <a id="weatherLink" href="#" target="_blank" class="text-decoration-none d-block mt-2"></a>
+                           <p id="weatherSummary" class="text-muted">Calculate a route to see weather.</p>
+                           <div id="weatherToday"></div>
+                           <div id="forecastDays" class="row g-2 mt-2"></div>
+                           <a id="weatherLink" href="#" target="_blank" class="text-decoration-none d-block mt-3"></a>
                         </div>
                     </div>
                 </div>
@@ -213,16 +214,22 @@
                 <div class="card shadow-sm">
                     <div class="card-body p-4">
                         <h5 class="card-title">Tourist Attractions</h5>
-                        <button id="showPOIBtn" class="btn btn-info mt-2">Show Attractions Near Stops</button>
+                        <button id="showPOIBtn" class="btn btn-info mt-2">Show/Hide Attractions</button>
                         <div id="poiSection" style="display: none;" class="mt-3">
                             <div class="d-flex gap-3 mb-3">
                                 <div><label for="poiRadius" class="form-label">Radius (km)</label><input id="poiRadius" type="number" value="5" min="1" class="form-control"></div>
-                                <div><label for="poiCount" class="form-label">Max POIs</label><input id="poiCount" type="number" value="10" min="1" class="form-control"></div>
+                                <div><label for="poiCount" class="form-label">Max POIs per Stop</label><input id="poiCount" type="number" value="5" min="1" class="form-control"></div>
                             </div>
-                            <button id="searchPOIBtn" class="btn btn-primary btn-sm">Search</button>
+                            <label class="form-label d-block">Filter by Category:</label>
+                            <div class="d-flex flex-wrap gap-2 mt-1">
+                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="museum" id="catMuseum" checked><label class="form-check-label" for="catMuseum">Museums</label></div>
+                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="historic" id="catHistoric" checked><label class="form-check-label" for="catHistoric">Historic</label></div>
+                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="viewpoint" id="catViewpoint" checked><label class="form-check-label" for="catViewpoint">Viewpoints</label></div>
+                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="park" id="catPark" checked><label class="form-check-label" for="catPark">Parks</label></div>
+                            </div>
+                            <button id="searchPOIBtn" class="btn btn-primary mt-3">Find Attractions</button>
                             <hr>
-                            <div id="poiList"></div>
-                            <div id="poiMap" class="mt-3"></div>
+                            <div id="poiList" class="poi-list-container"></div>
                         </div>
                     </div>
                 </div>
