@@ -46,24 +46,18 @@ body {
     color: #6c757d;
 }
 
-/* FIX: Simplified the CSS. Size and position are now controlled by JavaScript. */
 .poi-marker-icon {
-    /* The SVG background provides the appearance */
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3e%3cpath fill='%23E56E7F' d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z'/%3e%3ccircle cx='12' cy='9' r='4' fill='white'/%3e%3ccircle cx='12' cy='9' r='2.5' fill='%23E56E7F'/%3e%3c/svg%3e");
     background-size: contain;
     background-repeat: no-repeat;
-    
-    /* The animation's origin is now correctly set to the bottom tip */
     transition: transform 0.2s ease-in-out;
     transform-origin: bottom center;
 }
 
-/* No longer needed */
 .poi-marker-icon::before {
     content: none;
 }
 
-/* Ensures the default Leaflet icon styles don't interfere */
 .leaflet-div-icon {
     background: none;
     border: none;
@@ -145,4 +139,9 @@ body {
 .poi-marker-icon.poi-marker-highlight {
     animation: pulse 1s infinite;
     z-index: 1000 !important;
+}
+
+/* IMPROVEMENT: Make route lines on map feel interactive */
+.route-polyline {
+    cursor: pointer;
 }
