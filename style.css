@@ -3,14 +3,10 @@ body {
     background-color: #f8f9fa;
 }
 
-#map, #poiMap {
+#map {
     height: 400px;
     border-radius: 0.5rem;
     border: 1px solid #dee2e6;
-}
-
-#poiMap {
-    height: 250px;
 }
 
 .trip-time-badge {
@@ -47,11 +43,11 @@ body {
 }
 
 .poi-marker-icon {
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3e%3cpath fill='%23E56E7F' d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z'/%3e%3ccircle cx='12' cy='9' r='4' fill='white'/%3e%3ccircle cx='12' cy='9' r='2.5' fill='%23E56E7F'/%3e%3c/svg%3e");
     background-size: contain;
     background-repeat: no-repeat;
     transition: transform 0.2s ease-in-out;
     transform-origin: bottom center;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
 }
 
 .poi-marker-icon::before {
@@ -83,8 +79,49 @@ body {
     background-color: #e9ecef;
 }
 
-#forecastDays .forecast-day {
+#weatherToday {
     background-color: #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.weather-today-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.weather-today-main .temp {
+    font-size: 2.5rem;
+    font-weight: 500;
+}
+
+.weather-today-main .icon {
+    font-size: 3rem;
+}
+
+.weather-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    font-size: 0.9em;
+    color: #495057;
+}
+
+.weather-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.weather-detail-item span:first-child {
+    font-size: 1.2em;
+}
+
+#forecastDays .forecast-day {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
     border-radius: 0.375rem;
     padding: 0.75rem;
     text-align: center;
@@ -125,9 +162,24 @@ body {
     rx: 4;
 }
 
+.poi-list-container {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
 .poi-list-item {
     cursor: pointer;
     transition: background-color 0.2s;
+}
+.poi-list-item:hover, .poi-list-item.active {
+    background-color: #e9ecef;
+}
+
+.poi-list-item .poi-category {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: capitalize;
 }
 
 .poi-links a {
