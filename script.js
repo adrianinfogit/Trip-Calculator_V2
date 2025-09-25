@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
     const splitFill = $('splitFill'), warn = $('warn');
+    // FIX: Reverted API key to its original, correct value
     const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=';
 
     // --- Cost Calculation ---
@@ -70,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function () {
         throw new Error('Location not found: ' + place);
     }
 
-    $('calcRoute').addEventListener('click', async () => {
+    async function calculateAndDisplayRoute() {
         const depart = $('depart').value.trim();
         const destination = $('destination').value.trim();
         const stops = [...document.querySelectorAll('.stop-input')].map(i => i.value.trim()).filter(v => v);
@@ -163,7 +164,9 @@ document.addEventListener('DOMContentLoaded', function () {
             console.error(err); 
             alert('Error: ' + err.message); 
         }
-    });
+    }
+
+    $('calcRoute').addEventListener('click', calculateAndDisplayRoute);
     
     function selectRoute(feature) {
         const km = feature.properties.summary.distance / 1000;
@@ -257,7 +260,7 @@ document.addEventListener('DOMContentLoaded', function () {
         $('stops').appendChild(stopContainer);
         stopContainer.querySelector('.remove-stop').addEventListener('click', () => {
             stopContainer.remove();
-            $('calcRoute').click();
+            calculateAndDisplayRoute();
         });
         stopContainer.addEventListener('dragstart', () => stopContainer.classList.add('dragging'));
         stopContainer.addEventListener('dragend', () => stopContainer.classList.remove('dragging'));
@@ -312,7 +315,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     forecastDays.innerHTML += `<div class="col forecast-day"><strong>${day}</strong><br>${minTemp}° / ${maxTemp}°C ${weatherMap[data.daily.weathercode[i]] || '❓'}</div>`;
                 }
             }
-            // FIX: Updated the weather link to use wetteronline.de
             $('weatherLink').href = `https://www.wetteronline.de/wetter-suchen?search=${encodeURIComponent(placeName)}`;
             $('weatherLink').textContent = `Detailed forecast for ${placeName}`;
         } catch (err) {
@@ -443,9 +445,16 @@ document.addEventListener('DOMContentLoaded', function () {
         const section = $('poiSection');
         const isVisible = section.style.display === 'none';
         section.style.display = isVisible ? 'block' : 'none';
-        if (isVisible && !poiMap) {
-            poiMap = L.map('poiMap').setView([51.1657, 10.4515], 5);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(poiMap);
+        
+        if (isVisible) {
+            setTimeout(() => {
+                if (!poiMap) {
+                    poiMap = L.map('poiMap').setView([51.1657, 10.4515], 5);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(poiMap);
+                } else {
+                    poiMap.invalidateSize();
+                }
+            }, 10);
         }
     });
 
@@ -587,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 const departValue = $('depart').value.trim();
                                 const destValue = $('destination').value.trim();
                                 if (departValue && destValue) {
-                                    $('calcRoute').click();
+                                    calculateAndDisplayRoute();
                                 }
                             }, 100);
                         });
