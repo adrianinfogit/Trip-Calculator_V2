@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Advanced Trip Calculator</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="container my-5">
+        <header class="text-center mb-5">
+            <h1>Advanced Trip Calculator</h1>
+            <p class="lead text-muted">Plan your journey, calculate costs, and explore attractions.</p>
+        </header>
+
+        <div class="row g-4">
+            <!-- Left Column: Inputs & Map -->
+            <main class="col-lg-8">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body p-4">
+                        <h5 class="card-title mb-3">Route Planner</h5>
+                        <div class="row g-3">
+                            <div class="col-12 position-relative">
+                                <label for="depart" class="form-label">Departure</label>
+                                <input id="depart" type="text" class="form-control form-control-lg" placeholder="e.g., Berlin, Germany" value="Leverkuser Strasse 25, 65929">
+                            </div>
+                            <!-- Stops will be injected here -->
+                            <div id="stops" class="d-grid gap-3"></div>
+                            <div class="col-12">
+                                <button id="addStopBtn" class="btn btn-outline-secondary btn-sm">+ Add Stop</button>
+                            </div>
+                            <div class="col-12 position-relative">
+                                <label for="destination" class="form-label">Destination</label>
+                                <input id="destination" type="text" class="form-control form-control-lg" placeholder="e.g., Munich, Germany">
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center mt-4">
+                            <button id="calcRoute" class="btn btn-primary btn-lg">Calculate Route</button>
+                            <div id="tripTime" class="trip-time-badge ms-3">0h 00m</div>
+                        </div>
+                        <div class="alert alert-danger mt-3" id="warn" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body p-4">
+                        <h5 class="card-title mb-3">Vehicle & Price Information</h5>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label for="tripDistance" class="form-label">Trip Distance (km)</label><input id="tripDistance" type="number" class="form-control" value="0" min="0"></div>
+                            <div class="col-md-6"><label for="electricDistance" class="form-label">Electric Distance (km)</label><input id="electricDistance" type="number" class="form-control" value="0" min="0"></div>
+                            <div class="col-md-6"><label for="fuelConsumption" class="form-label">Fuel Consumption (L/100km)</label><input id="fuelConsumption" type="number" class="form-control" value="8" min="0" step="0.1"></div>
+                            <div class="col-md-6"><label for="electricConsumption" class="form-label">Electric Consumption (km/kWh)</label><input id="electricConsumption" type="number" class="form-control" value="4.2" min="0.1" step="0.1"></div>
+                            <div class="col-md-6"><label for="gasPrice" class="form-label">Gasoline Price (€/L)</label><input id="gasPrice" type="number" class="form-control" value="1.8" min="0" step="0.01"></div>
+                            <div class="col-md-6"><label for="elecPrice" class="form-label">Electricity Price (€/kWh)</label><input id="elecPrice" type="number" class="form-control" value="0.45" min="0" step="0.01"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body p-4">
+                        <h5 class="card-title">Route Visualization</h5>
+                         <div id="map" class="mt-3"></div>
+                         <div id="elevationProfile" class="mt-3"></div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Column: Results & Info -->
+            <aside class="col-lg-4">
+                <!-- FIX: Removed position-sticky and top-0 classes -->
+                <div class="card shadow-sm">
+                    <div class="card-body p-4">
+                        <h5 class="card-title">Results</h5>
+                        
+                        <!-- FIX: Restructured for consistent alignment -->
+                        <div class="d-grid gap-2 mt-3">
+                            <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Total Trip Cost</span>
+                                <span id="totalCost" class="fw-bold fs-4 text-primary">€0.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Cost of Electricity</span>
+                                <span id="costElec" class="fw-bold fs-5 text-success">€0.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Cost of Gasoline</span>
+                                <span id="costGas" class="fw-bold fs-5 text-warning">€0.00</span>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="d-flex justify-content-between text-muted"><span>Electric / Gas Split</span><span><span id="pctElec">0%</span> / <span id="pctGas">100%</span></span></div>
+                        <div class="progress mt-1" style="height: 14px;">
+                            <div id="splitFill" class="progress-bar bg-success" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        
+                        <hr>
+
+                        <div class="d-grid gap-2">
+                             <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">kWh Used</span>
+                                <span id="kwhElec" class="fw-semibold">0.00 kWh</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline">
+                                <span class="text-muted">Liters Used</span>
+                                <span id="litersGas" class="fw-semibold">0.00 L</span>
+                            </div>
+                        </div>
+
+                        <button id="googleMapsBtn" class="btn btn-success w-100 mt-4">Open in Google Maps</button>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mt-4">
+                    <div class="card-body p-4">
+                        <h5 class="card-title mb-3">Destination Weather</h5>
+                        <div id="weather">
+                           <p id="weatherTemperature" class="text-muted">Calculate a route to see weather.</p>
+                           <div id="forecastDays" class="row g-2"></div>
+                           <a id="weatherLink" href="#" target="_blank" class="text-decoration-none d-block mt-2"></a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mt-4">
+                    <div class="card-body p-4">
+                        <h5 class="card-title">Tourist Attractions</h5>
+                        <button id="showPOIBtn" class="btn btn-info mt-2">Show Attractions Near Stops</button>
+                        <div id="poiSection" style="display: none;" class="mt-3">
+                            <div class="d-flex gap-3 mb-3">
+                                <div><label for="poiRadius" class="form-label">Radius (km)</label><input id="poiRadius" type="number" value="5" min="1" class="form-control"></div>
+                                <div><label for="poiCount" class="form-label">Max POIs</label><input id="poiCount" type="number" value="10" min="1" class="form-control"></div>
+                            </div>
+                            <button id="searchPOIBtn" class="btn btn-primary btn-sm">Search</button>
+                            <hr>
+                            <div id="poiList"></div>
+                            <div id="poiMap" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Custom JS -->
+    <script src="script.js"></script>
+</body>
+</html>
