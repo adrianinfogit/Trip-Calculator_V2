@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
     const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost');
     const splitFill = $('splitFill'), warn = $('warn');
+    const locationsContainer = $('locationsContainer');
     const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=';
 
     // --- Cost Calculation ---
@@ -88,22 +89,31 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function calculateAndDisplayRoute() {
-        const depart = $('depart').value.trim();
-        const destination = $('destination').value.trim();
-        const stops = [...document.querySelectorAll('.stop-input')].map(i => i.value.trim()).filter(v => v);
-        if (!depart || !destination) { alert('Enter both departure and destination'); return; }
+        const calcButton = $('calcRoute');
+        calcButton.disabled = true;
+        calcButton.textContent = 'Calculating...';
+
+        const locationInputs = locationsContainer.querySelectorAll('.location-input');
+        const allPlaces = Array.from(locationInputs).map(input => input.value.trim());
+        const validPlaces = allPlaces.filter(p => p);
+
+        if (validPlaces.length < 2) {
+            alert('Enter at least a departure and a destination');
+            calcButton.disabled = false;
+            calcButton.textContent = 'Calculate Route';
+            return;
+        }
 
         routeLayers.forEach(l => map.removeLayer(l));
         routeLayers = [];
         markers.forEach(m => map.removeLayer(m));
         markers = [];
         $('alternativeRoutesInfo').innerHTML = '';
-        poiLayer.clearLayers(); // Clear POIs when a new route is calculated
+        poiLayer.clearLayers();
         $('poiList').innerHTML = '';
 
         try {
-            const allPlaces = [depart, ...stops, destination];
-            const coords = await Promise.all(allPlaces.map(geocode));
+            const coords = await Promise.all(validPlaces.map(geocode));
             
             const profile = $('profile').value;
             const preference = $('preference').value;
@@ -114,10 +124,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 preference: preference,
                 instructions: false
             };
-
+            
             const directDistance = haversineDistance(coords[0], coords[coords.length - 1]);
             const LONG_ROUTE_THRESHOLD_KM = 150; 
-            if (directDistance < LONG_ROUTE_THRESHOLD_KM) {
+            if (coords.length === 2 && directDistance < LONG_ROUTE_THRESHOLD_KM) {
                 body.alternative_routes = { target_count: 3 };
             }
 
@@ -133,7 +143,10 @@ document.addEventListener('DOMContentLoaded', function () {
             const json = await resRoute.json();
             
             if (json.error) {
-                throw new Error(json.error.message || 'An unknown routing error occurred.');
+                const errorMessage = json.error.message.includes('waypoints > 2') 
+                    ? "Alternative routes are not supported when using stops."
+                    : json.error.message;
+                throw new Error(errorMessage || 'An unknown routing error occurred.');
             }
 
             if (json.features && json.features.length > 0) {
@@ -174,13 +187,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 displayAlternativeRoutes(routeFeatures);
                 
                 const [destLon, destLat] = coords[coords.length - 1];
-                fetchWeather(destLat, destLon, destination);
+                fetchWeather(destLat, destLon, validPlaces[validPlaces.length - 1]);
             } else { 
                 alert('No route found. Please check if the locations are valid and accessible.'); 
             }
         } catch (err) { 
             console.error(err); 
             alert('Error: ' + err.message); 
+        } finally {
+            calcButton.disabled = false;
+            calcButton.textContent = 'Calculate Route';
         }
     }
 
@@ -253,52 +269,120 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     $('googleMapsBtn').addEventListener('click', () => {
-        const depart = encodeURIComponent($('depart').value.trim());
-        const destination = encodeURIComponent($('destination').value.trim());
-        const stops = [...document.querySelectorAll('.stop-input')].map(i => encodeURIComponent(i.value.trim())).filter(v => v);
-        if (!depart || !destination) { alert('Enter both departure and destination'); return; }
-        const waypoints = stops.join('|');
-        const url = `https://www.google.com/maps/dir/?api=1&origin=${depart}&destination=${destination}` + (waypoints ? `&waypoints=${waypoints}` : '');
+        const allPlaces = Array.from(locationsContainer.querySelectorAll('.location-input'))
+            .map(i => i.value.trim())
+            .filter(Boolean);
+
+        if (allPlaces.length < 2) {
+            alert('Enter at least a departure and destination');
+            return;
+        }
+
+        const origin = encodeURIComponent(allPlaces[0]);
+        const destination = encodeURIComponent(allPlaces[allPlaces.length - 1]);
+        const waypoints = allPlaces.slice(1, -1).map(p => encodeURIComponent(p)).join('|');
+        
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}` + (waypoints ? `&waypoints=${waypoints}` : '');
         window.open(url, '_blank');
     });
 
-    // --- Stops Management ---
-    $('addStopBtn').addEventListener('click', () => addStopRow());
-    function addStopRow() {
-        const stopContainer = document.createElement('div');
-        stopContainer.className = 'stop-row';
-        stopContainer.draggable = true;
-        stopContainer.innerHTML = `
+    // --- Location Management ---
+    function createLocationRow(value = '') {
+        const row = document.createElement('div');
+        row.className = 'location-row';
+        row.draggable = true;
+    
+        row.innerHTML = `
             <div class="drag-handle">☰</div>
             <div class="flex-grow-1 position-relative">
-                <input type="text" class="form-control stop-input" placeholder="e.g., Leipzig">
+                <input type="text" class="form-control location-input" value="${value}">
             </div>
-            <button type="button" class="btn-close remove-stop"></button>
         `;
-        $('stops').appendChild(stopContainer);
-        stopContainer.querySelector('.remove-stop').addEventListener('click', () => {
-            stopContainer.remove();
+    
+        row.addEventListener('dragstart', () => row.classList.add('dragging'));
+        row.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
+            updateLocationRoles();
             calculateAndDisplayRoute();
         });
-        stopContainer.addEventListener('dragstart', () => stopContainer.classList.add('dragging'));
-        stopContainer.addEventListener('dragend', () => stopContainer.classList.remove('dragging'));
-        setupAutocomplete(stopContainer.querySelector('.stop-input'));
+    
+        setupAutocomplete(row.querySelector('.location-input'));
+        return row;
     }
 
-    const stopsContainer = $('stops');
-    stopsContainer.addEventListener('dragover', e => {
+    function addStopRow() {
+        const allRows = locationsContainer.querySelectorAll('.location-row');
+        const newStop = createLocationRow('');
+        locationsContainer.insertBefore(newStop, allRows[allRows.length - 1]);
+        updateLocationRoles();
+    }
+    
+    function updateLocationRoles() {
+        const rows = locationsContainer.querySelectorAll('.location-row');
+        rows.forEach((row, index) => {
+            const input = row.querySelector('.location-input');
+            const isStop = index > 0 && index < rows.length - 1;
+
+            if (index === 0) {
+                input.placeholder = 'Departure';
+            } else if (index === rows.length - 1) {
+                input.placeholder = 'Destination';
+            } else {
+                input.placeholder = `Stop ${index}`;
+            }
+
+            let removeBtn = row.querySelector('.remove-stop');
+            if (isStop && !removeBtn) {
+                const newBtn = document.createElement('button');
+                newBtn.type = 'button';
+                newBtn.className = 'btn-close remove-stop';
+                newBtn.setAttribute('aria-label', 'Remove Stop');
+                newBtn.addEventListener('click', () => {
+                    row.remove();
+                    updateLocationRoles();
+                    calculateAndDisplayRoute();
+                });
+                row.appendChild(newBtn);
+            } else if (!isStop && removeBtn) {
+                removeBtn.remove();
+            }
+        });
+    }
+
+    function initializeLocations() {
+        const departure = createLocationRow('Leverkuser Straße 25, Frankfurt, HE, Germany');
+        const destination = createLocationRow('');
+        locationsContainer.appendChild(departure);
+        locationsContainer.appendChild(destination);
+        updateLocationRoles();
+    }
+
+    $('addStopBtn').addEventListener('click', addStopRow);
+    
+    $('reverseTripBtn').addEventListener('click', () => {
+        const inputs = locationsContainer.querySelectorAll('.location-input');
+        if (inputs.length < 2) return;
+        const firstVal = inputs[0].value;
+        const lastVal = inputs[inputs.length - 1].value;
+        inputs[0].value = lastVal;
+        inputs[inputs.length - 1].value = firstVal;
+        calculateAndDisplayRoute();
+    });
+
+    locationsContainer.addEventListener('dragover', e => {
         e.preventDefault();
         const dragging = document.querySelector('.dragging');
-        const afterElement = getDragAfterElement(stopsContainer, e.clientY);
+        if (!dragging) return;
+        const afterElement = getDragAfterElement(locationsContainer, e.clientY);
         if (afterElement == null) {
-            stopsContainer.appendChild(dragging);
+            locationsContainer.appendChild(dragging);
         } else {
-            stopsContainer.insertBefore(dragging, afterElement);
+            locationsContainer.insertBefore(dragging, afterElement);
         }
     });
 
     function getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.stop-row:not(.dragging)')];
+        const draggableElements = [...container.querySelectorAll('.location-row:not(.dragging)')];
         return draggableElements.reduce((closest, child) => {
             const box = child.getBoundingClientRect();
             const offset = y - box.top - box.height / 2;
@@ -310,6 +394,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
+
     // --- Weather ---
     async function fetchWeather(lat, lon, placeName) {
         $('weatherSummary').textContent = 'Loading...';
@@ -317,9 +402,14 @@ document.addEventListener('DOMContentLoaded', function () {
         $('forecastDays').innerHTML = '';
         $('weatherLink').textContent = '';
         try {
+            // --- DEFINITIVE FIX: Use the official and correct Open-Meteo API URL ---
             const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,precipitation_sum,precipitation_probability_max,windspeed_10m_max,sunrise,sunset&current_weather=true&timezone=auto`);
             const data = await res.json();
             
+            if (data.error) {
+                throw new Error(data.reason);
+            }
+
             const weatherCodes = { 0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Depositing rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain', 71: 'Slight snow fall', 73: 'Moderate snow fall', 75: 'Heavy snow fall', 80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers', 95: 'Thunderstorm' };
             const weatherIcons = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️', 51: '🌦️', 53: '🌦️', 55: '🌦️', 61: '🌧️', 63: '🌧️', 65: '🌧️', 71: '🌨️', 73: '🌨️', 75: '🌨️', 80: '🌩️', 81: '🌩️', 82: '🌩️', 95: '⛈️' };
             
@@ -520,9 +610,12 @@ document.addEventListener('DOMContentLoaded', function () {
         poiListContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div> Searching...</div>';
         
         poiLayer.clearLayers();
-        const allPlaces = [$('depart').value.trim(), ...[...document.querySelectorAll('.stop-input')].map(i => i.value.trim()).filter(v => v), $('destination').value.trim()];
-        if (allPlaces.length < 2 || !allPlaces[0] || !allPlaces[allPlaces.length - 1]) {
-            poiListContainer.textContent = 'Please calculate a route first.';
+        const allPlaces = Array.from(locationsContainer.querySelectorAll('.location-input'))
+            .map(i => i.value.trim())
+            .filter(Boolean);
+
+        if (allPlaces.length === 0) {
+            poiListContainer.textContent = 'Please enter some locations first.';
             return;
         }
 
@@ -571,7 +664,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     data.elements.forEach(poi => {
                         const name = poi.tags?.name || 'Unnamed Attraction';
                         const poiId = `${poi.type}-${poi.id}`;
-                        if(poiMarkers[poiId]) return; // Avoid duplicates
+                        if(poiMarkers[poiId]) return;
 
                         const poiLat = poi.lat || poi.center.lat;
                         const poiLon = poi.lon || poi.center.lon;
@@ -670,9 +763,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                 dropdown = null;
                             }
                             setTimeout(() => {
-                                const departValue = $('depart').value.trim();
-                                const destValue = $('destination').value.trim();
-                                if (departValue && destValue) {
+                                const allPlaces = Array.from(locationsContainer.querySelectorAll('.location-input'))
+                                    .map(i => i.value.trim()).filter(Boolean);
+                                if (allPlaces.length >= 2) {
                                     calculateAndDisplayRoute();
                                 }
                             }, 100);
@@ -696,8 +789,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }, 150));
     }
-    setupAutocomplete($('depart'));
-    setupAutocomplete($('destination'));
     
     // --- Helpers ---
     function formatDuration(sec) {
@@ -720,4 +811,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
-});
+
+    // --- Initializer ---
+    initializeLocations();
+});``
