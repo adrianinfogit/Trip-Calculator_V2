@@ -6,6 +6,8 @@
     <title>Advanced Trip Calculator</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <!-- Custom CSS -->
@@ -20,25 +22,22 @@
             <div class="col-lg-3">
                 <div class="card shadow-sm h-100">
                     <div class="card-body p-4 d-flex flex-column">
-                        <h5 class="card-title mb-3">Route Planner</h5>
-                        <div class="row g-3">
-                            <div class="col-12 position-relative">
-                                <label for="depart" class="form-label">Departure</label>
-                                <input id="depart" type="text" class="form-control form-control-lg" placeholder="e.g., Berlin, Germany" value="Leverkuser Straße 25, Frankfurt, HE, Germany">
-                            </div>
-                            <!-- Stops will be injected here -->
-                            <div id="stops" class="d-grid gap-3"></div>
-                            <div class="col-12">
-                                <button id="addStopBtn" class="btn btn-outline-secondary btn-sm">+ Add Stop</button>
-                            </div>
-                            <div class="col-12 position-relative">
-                                <label for="destination" class="form-label">Destination</label>
-                                <!-- REVERT: Destination field now has its default value again -->
-                                <input id="destination" type="text" class="form-control form-control-lg" placeholder="e.g., Munich, Germany" value="">
-                            </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">Route Planner</h5>
+                            <button id="reverseTripBtn" class="btn btn-sm btn-outline-secondary" title="Reverse Trip">
+                                <i class="bi bi-arrow-down-up"></i>
+                            </button>
+                        </div>
+                        
+                        <div id="locationsContainer" class="d-grid gap-3">
+                            <!-- Location rows will be dynamically inserted here by JS -->
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button id="addStopBtn" class="btn btn-outline-secondary btn-sm">+ Add Stop</button>
                         </div>
 
-                        <div class="row g-3 mt-4">
+                        <div class="row g-3 mt-auto pt-4">
                             <h6 class="text-muted">Route Options</h6>
                             <div class="col-md-6">
                                 <label for="profile" class="form-label">Profile</label>
