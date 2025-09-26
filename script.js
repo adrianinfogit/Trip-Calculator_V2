@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost');
     const splitFill = $('splitFill'), warn = $('warn');
     const locationsContainer = $('locationsContainer');
+    // --- FIX: Restored the original, working API Key ---
     const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=';
 
     // --- Cost Calculation ---
@@ -103,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
             calcButton.textContent = 'Calculate Route';
             return;
         }
-
+        
         routeLayers.forEach(l => map.removeLayer(l));
         routeLayers = [];
         markers.forEach(m => map.removeLayer(m));
@@ -111,6 +112,9 @@ document.addEventListener('DOMContentLoaded', function () {
         $('alternativeRoutesInfo').innerHTML = '';
         poiLayer.clearLayers();
         $('poiList').innerHTML = '';
+        $('elevationProfile').innerHTML = '';
+        $('elevationStats').innerHTML = '';
+        $('elevationImpact').innerHTML = '';
 
         try {
             const coords = await Promise.all(validPlaces.map(geocode));
@@ -402,7 +406,6 @@ document.addEventListener('DOMContentLoaded', function () {
         $('forecastDays').innerHTML = '';
         $('weatherLink').textContent = '';
         try {
-            // --- DEFINITIVE FIX: Use the official and correct Open-Meteo API URL ---
             const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,precipitation_sum,precipitation_probability_max,windspeed_10m_max,sunrise,sunset&current_weather=true&timezone=auto`);
             const data = await res.json();
             
@@ -482,14 +485,19 @@ document.addEventListener('DOMContentLoaded', function () {
     let elevationProfileCoords = [], elevationHoverMarker = null;
 
     async function fetchElevationProfile(coordsLatLng, totalDistanceKm) {
-        const maxPoints = 50;
+        $('elevationProfile').innerHTML = '<div class="text-center text-muted">Loading elevation...</div>';
+        $('elevationStats').innerHTML = '';
+        $('elevationImpact').innerHTML = '';
+
+        const maxPoints = 100;
         const step = Math.max(1, Math.floor(coordsLatLng.length / maxPoints));
         const sampled = coordsLatLng.filter((_, i) => i % step === 0);
-        if (sampled[sampled.length - 1] !== coordsLatLng[coordsLatLng.length - 1]) {
+        if (coordsLatLng.length > 1 && sampled[sampled.length - 1] !== coordsLatLng[coordsLatLng.length - 1]) {
             sampled.push(coordsLatLng[coordsLatLng.length - 1]);
         }
         elevationProfileCoords = sampled;
         const locations = sampled.map(([lat, lon]) => ({ latitude: lat, longitude: lon }));
+
         try {
             const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
                 method: 'POST',
@@ -507,17 +515,168 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function calculateElevationImpact(totalAscent, totalDescent, totalDistanceKm) {
+        if (totalDistanceKm < 1 || totalAscent < 20) {
+            return {
+                level: 'Relatively Flat',
+                change: 'none',
+                gas: '0-2%',
+                elec: '0-2%',
+                reason: 'This route is relatively flat, so elevation will have minimal impact on consumption.'
+            };
+        }
+    
+        const netElevationChange = totalAscent - totalDescent;
+        const grossClimbRate = totalAscent / totalDistanceKm; // m/km
+        const netClimbRate = netElevationChange / totalDistanceKm; // m/km, positive is uphill
+    
+        const IS_ROUND_TRIP_LIKE = Math.abs(netElevationChange) < (totalAscent * 0.15); // Net change is less than 15% of total climb
+    
+        // --- Case 1: Round Trip or Balanced Rolling Hills ---
+        if (IS_ROUND_TRIP_LIKE) {
+            const reason = 'This is a balanced or round trip. Energy used for climbing is not fully recovered during descents, leading to higher consumption.';
+            if (grossClimbRate > 30) { // Very Hilly (e.g., > 3000m climb over 100km)
+                return { level: 'Very Hilly', change: 'increase', gas: '15-25%', elec: '10-20%', reason };
+            }
+            if (grossClimbRate > 15) { // Moderately Hilly
+                return { level: 'Rolling Hills', change: 'increase', gas: '8-15%', elec: '5-12%', reason };
+            }
+            // Gentle Hills
+            return { level: 'Gentle Hills', change: 'increase', gas: '3-8%', elec: '2-6%', reason };
+        }
+    
+        // --- Case 2: One-Way Primarily Uphill Trip ---
+        if (netClimbRate > 5) { // Net climb of >5m per km
+            const reason = 'This route has a significant net climb, requiring much more energy to overcome gravity. Note: your return trip would be very efficient.';
+            if (netClimbRate > 25) { // Very Steep Uphill
+                return { level: 'Steep Uphill', change: 'increase', gas: '30%+', elec: '25%+', reason };
+            }
+            if (netClimbRate > 10) { // Moderate Uphill
+                return { level: 'Moderate Uphill', change: 'increase', gas: '15-30%', elec: '12-25%', reason };
+            }
+             // Gentle Uphill
+            return { level: 'Gentle Uphill', change: 'increase', gas: '5-15%', elec: '5-12%', reason };
+        }
+    
+        // --- Case 3: One-Way Primarily Downhill Trip ---
+        if (netClimbRate < -5) { // Net descent of >5m per km
+            const reason = 'This route is primarily downhill. A PHEV can recover significant energy via regenerative braking. Note: your return trip would use much more energy.';
+            if (netClimbRate < -25) { // Very Steep Downhill
+                return { level: 'Steep Descent', change: 'decrease', gas: '15-25%', elec: '30-60%+', reason };
+            }
+            if (netClimbRate < -10) { // Moderate Downhill
+                return { level: 'Moderate Descent', change: 'decrease', gas: '10-20%', elec: '15-30%', reason };
+            }
+             // Gentle Downhill
+            return { level: 'Gentle Descent', change: 'decrease', gas: '5-10%', elec: '5-15%', reason };
+        }
+        
+        // --- Fallback for minor inclines/declines ---
+        if (netClimbRate > 0) { // Slight net uphill
+            return {
+                level: 'Slightly Uphill',
+                change: 'increase',
+                gas: '2-5%',
+                elec: '1-4%',
+                reason: 'The route has a minor net incline, which will slightly increase overall consumption.'
+            };
+        } else { // Slight net downhill
+             return {
+                level: 'Slightly Downhill',
+                change: 'decrease',
+                gas: '1-4%',
+                elec: '2-6%',
+                reason: 'The route has a minor net descent, allowing for some energy savings through coasting and regeneration.'
+            };
+        }
+    }
+
+
     function renderElevationChart(elevations, totalDistanceKm) {
         const container = $('elevationProfile');
         container.innerHTML = '';
-        const w = container.clientWidth, h = 100, n = elevations.length;
+        if (!container.clientWidth) {
+            setTimeout(() => renderElevationChart(elevations, totalDistanceKm), 100);
+            return;
+        }
+
+        // --- 1. Calculate Statistics ---
+        let totalAscent = 0, totalDescent = 0, maxGrade = 0;
+        const segmentDistanceKm = totalDistanceKm / (elevations.length - 1);
+
+        for (let i = 1; i < elevations.length; i++) {
+            const elevChange = elevations[i] - elevations[i-1];
+            if (elevChange > 0) {
+                totalAscent += elevChange;
+            } else {
+                totalDescent -= elevChange;
+            }
+            if (segmentDistanceKm > 0) {
+                const grade = (elevChange / (segmentDistanceKm * 1000)) * 100;
+                if (grade > maxGrade) {
+                    maxGrade = grade;
+                }
+            }
+        }
+
+        // --- 2. Render Statistics & Impact Suggestion ---
+        $('elevationStats').innerHTML = `
+            <div class="elevation-stat-item">
+                <div class="label"><i class="bi bi-arrow-up"></i> Ascent</div>
+                <div class="value">${Math.round(totalAscent)} m</div>
+            </div>
+            <div class="elevation-stat-item">
+                <div class="label"><i class="bi bi-arrow-down"></i> Descent</div>
+                <div class="value">${Math.round(totalDescent)} m</div>
+            </div>
+             <div class="elevation-stat-item">
+                <div class="label"><i class="bi bi-reception-4"></i> Max Grade</div>
+                <div class="value">${maxGrade.toFixed(1)}%</div>
+            </div>
+        `;
+        
+        const impact = calculateElevationImpact(totalAscent, totalDescent, totalDistanceKm);
+        
+        const alertType = impact.change === 'increase' ? 'info' : (impact.change === 'decrease' ? 'success' : 'secondary');
+        const iconType = impact.change === 'increase' ? 'info-circle-fill' : (impact.change === 'decrease' ? 'check-circle-fill' : 'lightbulb');
+        
+        let suggestionHtml = '';
+        if (impact.change !== 'none') {
+            suggestionHtml = `
+                <div class="mt-1">Suggested consumption adjustment for a more accurate cost:</div>
+                <ul class="mb-0 mt-1">
+                    <li><b>Gasoline:</b> ~${impact.gas} ${impact.change}</li>
+                    <li><b>Electric:</b> ~${impact.elec} ${impact.change}</li>
+                </ul>
+            `;
+        }
+
+        $('elevationImpact').innerHTML = `
+            <div class="alert alert-${alertType} elevation-impact-suggestion">
+                <i class="bi bi-${iconType}"></i>
+                <div>
+                    <strong>Elevation Impact: ${impact.level}.</strong> ${impact.reason}
+                    ${suggestionHtml}
+                </div>
+            </div>
+        `;
+        
+        // --- 3. Render Chart SVG ---
+        const w = container.clientWidth, h = 120, n = elevations.length;
         const margin = 32, chartW = w - margin - 8, chartH = h - margin;
         const max = Math.max(...elevations), min = Math.min(...elevations);
 
-        let points = '', hoverCircles = '';
+        let points = '', hoverCircles = '', gridLines = '';
+        const yRange = max - min;
+        
+        for (let i = 0; i <= 4; i++) {
+            const y = chartH - (i/4) * (chartH - 8);
+            gridLines += `<line class="elevation-grid-line" x1="${margin}" y1="${y}" x2="${margin+chartW}" y2="${y}"></line>`;
+        }
+
         for (let i = 0; i < n; i++) {
             const x = margin + (i / (n - 1)) * chartW;
-            const y = chartH - ((elevations[i] - min) / (max - min + 1e-6)) * (chartH - 8);
+            const y = chartH - ((elevations[i] - min) / (yRange + 1e-6)) * (chartH - 8);
             points += `${x},${y} `;
             hoverCircles += `<circle class="elev-hover" data-idx="${i}" cx="${x}" cy="${y}" r="8" fill="transparent" />`;
         }
@@ -530,22 +689,24 @@ document.addEventListener('DOMContentLoaded', function () {
                         <stop offset="100%" style="stop-color:#0d6efd;stop-opacity:0.05"/>
                     </linearGradient>
                 </defs>
+                ${gridLines}
                 <path d="M${margin},${chartH} L${points} L${margin + chartW},${chartH} Z" fill="url(#elevGradient)"/>
-                <path d="M${points.trim().split(' ')[0]} L${points}" fill="none" stroke="#0d6efd" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                <path d="M${points.trim().split(' ')[0]} L${points}" fill="none" stroke="#0d6efd" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
                 ${hoverCircles}
                 <g id="elevation-tooltip" style="visibility: hidden;">
                     <line class="elevation-tooltip-line" y1="8" y2="${chartH}"></line>
-                    <rect class="elevation-tooltip-rect" width="50" height="20" y="8"></rect>
-                    <text class="elevation-tooltip-text" y="22">0m</text>
+                    <rect class="elevation-tooltip-rect" width="90" height="20" y="8"></rect>
+                    <text class="elevation-tooltip-text" y="22">0m / 0km</text>
                 </g>
-                <text x="2" y="${chartH}" font-size="11" fill="#6c757d">${min}m</text>
-                <text x="2" y="16" font-size="11" fill="#6c757d">${max}m</text>
-                <text x="${margin}" y="${h - 4}" font-size="11" text-anchor="middle">0km</text>
-                <text x="${margin + chartW}" y="${h - 4}" font-size="11" text-anchor="middle">${Math.round(totalDistanceKm)}km</text>
+                <text x="2" y="${chartH}" font-size="11" fill="#6c757d">${Math.round(min)} m</text>
+                <text x="2" y="16" font-size="11" fill="#6c757d">${Math.round(max)} m</text>
+                <text x="${margin}" y="${h - 4}" font-size="11" text-anchor="middle">0 km</text>
+                <text x="${margin + chartW}" y="${h - 4}" font-size="11" text-anchor="middle">${Math.round(totalDistanceKm)} km</text>
             </svg>`;
         
         container.innerHTML = `<div style="margin-bottom: 4px;">Elevation Profile</div>${svgContent}`;
 
+        // --- 4. Setup Tooltip Interactivity ---
         const tooltip = container.querySelector('#elevation-tooltip');
         const tooltipLine = tooltip.querySelector('.elevation-tooltip-line');
         const tooltipRect = tooltip.querySelector('.elevation-tooltip-rect');
@@ -557,14 +718,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     const idx = parseInt(e.target.dataset.idx);
                     const x = parseFloat(e.target.getAttribute('cx'));
                     const elevation = Math.round(elevations[idx]);
+                    const distance = (idx / (n - 1)) * totalDistanceKm;
                     
                     showElevationHoverMarker(idx);
 
                     tooltipLine.setAttribute('x1', x);
                     tooltipLine.setAttribute('x2', x);
                     tooltipText.setAttribute('x', x);
-                    tooltipRect.setAttribute('x', x - 25);
-                    tooltipText.textContent = `${elevation}m`;
+                    tooltipRect.setAttribute('x', x - 45);
+                    tooltipText.textContent = `${elevation} m / ${distance.toFixed(1)} km`;
                     tooltip.style.visibility = 'visible';
                 });
             });
@@ -814,4 +976,4 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Initializer ---
     initializeLocations();
-});``
+});
