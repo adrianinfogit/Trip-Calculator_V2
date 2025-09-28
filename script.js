@@ -1,16 +1,20 @@
 document.addEventListener('DOMContentLoaded', function () {
     const $ = id => document.getElementById(id);
 
+    // --- Configuration ---
+    const config = {
+        // --- FIX: Restored the original, working API Key ---
+        ORS_API_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=',
+        LONG_ROUTE_THRESHOLD_KM: 150,
+    };
+
     // --- Element Selectors ---
     const inputs = ['tripDistance', 'electricDistance', 'fuelConsumption', 'electricConsumption', 'gasPrice', 'elecPrice'].map($);
     const [tripDistance, electricDistance, fuelConsumption, electricConsumption, gasPrice, elecPrice] = inputs;
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
-    const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost');
-    const splitFill = $('splitFill'), warn = $('warn');
-    const locationsContainer = $('locationsContainer');
-    // --- FIX: Restored the original, working API Key ---
-    const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=';
+    const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost'), splitFill = $('splitFill'), warn = $('warn');
+    const locationsContainer = $('locationsContainer'), showPOIBtn = $('showPOIBtn');
 
     // --- Cost Calculation ---
     function parseNumber(el) { const v = parseFloat(el.value); return Number.isFinite(v) ? v : 0; }
@@ -20,10 +24,15 @@ document.addEventListener('DOMContentLoaded', function () {
         let d = parseNumber(tripDistance);
         let dElec = parseNumber(electricDistance);
         const fuelLper100 = parseNumber(fuelConsumption);
-        const kmPerKwh = parseNumber(electricConsumption) || 1e-6;
+        const kmPerKwh = parseNumber(electricConsumption);
         const priceGas = parseNumber(gasPrice);
         const priceElec = parseNumber(elecPrice);
 
+        // IMPROVEMENT: If electric consumption is 0, treat electric range as 0.
+        if (kmPerKwh <= 0) {
+            dElec = 0;
+        }
+        
         if (dElec > d) {
             warn.style.display = 'block';
             warn.textContent = 'Electric distance exceeds trip distance — clamped.';
@@ -38,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const dGas = Math.max(0, d - dElec);
         const liters = (dGas * fuelLper100) / 100;
-        const kwh = dElec / kmPerKwh;
+        const kwh = (kmPerKwh > 0) ? (dElec / kmPerKwh) : 0;
         const cost_gas = liters * priceGas;
         const cost_elec = kwh * priceElec;
         const total = cost_gas + cost_elec;
@@ -75,7 +84,86 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     inputs.forEach(inp => inp.addEventListener('input', calculate));
-    calculate();
+
+    // Sync electric range with trip distance for the "Short Range" profile
+    tripDistance.addEventListener('input', () => {
+        const activeProfile = document.querySelector('input[name="vehicleProfile"]:checked').value;
+        if (activeProfile === 'shortRange') {
+            electricDistance.value = tripDistance.value;
+        }
+    });
+
+    // --- Embedded Vehicle Profiles ---
+    const vehicleProfiles = {
+        shortRange: {
+            // electricDistance is now handled dynamically
+            fuelConsumption: 8.0,
+            electricConsumption: 4.2,
+            gasPrice: 1.80,
+            elecPrice: 0.45
+        },
+        longRange: {
+            electricDistance: 40,
+            fuelConsumption: 8.0,
+            electricConsumption: 4.2,
+            gasPrice: 1.80,
+            elecPrice: 0.45
+        },
+        uphill: {
+            electricDistance: 0,
+            fuelConsumption: 9.5,
+            electricConsumption: 3.5,
+            gasPrice: 1.80,
+            elecPrice: 0.45
+        }
+    };
+
+    function applyProfile(profileName) {
+        const profile = vehicleProfiles[profileName];
+        if (!profile) return;
+
+        Object.keys(profile).forEach(key => {
+            const input = $(key);
+            if (input) input.value = profile[key];
+        });
+
+        if (profileName === 'shortRange') {
+            electricDistance.value = tripDistance.value;
+        }
+
+        // Ensure autopopulated electric range does not exceed trip distance.
+        const d = parseNumber(tripDistance);
+        const dElec = parseNumber(electricDistance);
+        if (d > 0 && dElec > d) {
+            electricDistance.value = tripDistance.value;
+        }
+
+        calculate();
+    }
+
+    document.querySelectorAll('input[name="vehicleProfile"]').forEach(radio => {
+        radio.addEventListener('change', (e) => applyProfile(e.target.value));
+    });
+
+    function autoSelectProfile(distance, maxGrade = 0) {
+        let profileToSelect;
+
+        if (distance > 100) {
+            profileToSelect = 'longRange';
+        } else if (maxGrade > 15) { // This implies distance <= 100
+            profileToSelect = 'uphill';
+        } else {
+            profileToSelect = 'shortRange';
+        }
+
+        // Visually check the correct radio button
+        const radio = document.querySelector(`#profileSelector input[value="${profileToSelect}"]`);
+        if (radio) {
+            radio.checked = true;
+        }
+
+        applyProfile(profileToSelect);
+    }
 
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
@@ -83,7 +171,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map);
 
     async function geocode(place) {
-        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(place)}`);
+        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${config.ORS_API_KEY}&text=${encodeURIComponent(place)}`);
         const data = await res.json();
         if (data.features && data.features.length > 0) return data.features[0].geometry.coordinates;
         throw new Error('Location not found: ' + place);
@@ -130,8 +218,7 @@ document.addEventListener('DOMContentLoaded', function () {
             };
             
             const directDistance = haversineDistance(coords[0], coords[coords.length - 1]);
-            const LONG_ROUTE_THRESHOLD_KM = 150; 
-            if (coords.length === 2 && directDistance < LONG_ROUTE_THRESHOLD_KM) {
+            if (coords.length === 2 && directDistance < config.LONG_ROUTE_THRESHOLD_KM) {
                 body.alternative_routes = { target_count: 3 };
             }
 
@@ -141,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const resRoute = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
                 method: 'POST',
-                headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
+                headers: { 'Authorization': config.ORS_API_KEY, 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
             const json = await resRoute.json();
@@ -209,7 +296,6 @@ document.addEventListener('DOMContentLoaded', function () {
     function selectRoute(feature) {
         const km = feature.properties.summary.distance / 1000;
         tripDistance.value = km.toFixed(1);
-        calculate();
 
         const durationSec = feature.properties.summary.duration;
         $('tripTime').textContent = formatDuration(durationSec);
@@ -272,22 +358,37 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    $('googleMapsBtn').addEventListener('click', () => {
+    $('googleMapsBtn').addEventListener('click', async () => {
+        const btn = $('googleMapsBtn');
+        const btnText = btn.querySelector('.btn-text');
+        const spinner = btn.querySelector('.spinner-border');
+
+        btn.disabled = true;
+        btnText.textContent = 'Preparing...';
+        spinner.classList.remove('d-none');
+
         const allPlaces = Array.from(locationsContainer.querySelectorAll('.location-input'))
             .map(i => i.value.trim())
             .filter(Boolean);
 
         if (allPlaces.length < 2) {
             alert('Enter at least a departure and destination');
+            btn.disabled = false;
+            btnText.textContent = 'Open in Google Maps';
+            spinner.classList.add('d-none');
             return;
         }
 
         const origin = encodeURIComponent(allPlaces[0]);
         const destination = encodeURIComponent(allPlaces[allPlaces.length - 1]);
         const waypoints = allPlaces.slice(1, -1).map(p => encodeURIComponent(p)).join('|');
-        
+
         const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}` + (waypoints ? `&waypoints=${waypoints}` : '');
         window.open(url, '_blank');
+
+        btn.disabled = false;
+        btnText.textContent = 'Open in Google Maps';
+        spinner.classList.add('d-none');
     });
 
     // --- Location Management ---
@@ -400,79 +501,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     // --- Weather ---
+    const weatherInfoMap = {
+        0: { desc: 'Clear sky', icon: '☀️' }, 1: { desc: 'Mainly clear', icon: '🌤️' }, 2: { desc: 'Partly cloudy', icon: '⛅' },
+        3: { desc: 'Overcast', icon: '☁️' }, 45: { desc: 'Fog', icon: '🌫️' }, 48: { desc: 'Depositing rime fog', icon: '🌫️' },
+        51: { desc: 'Light drizzle', icon: '🌦️' }, 53: { desc: 'Moderate drizzle', icon: '🌦️' }, 55: { desc: 'Dense drizzle', icon: '🌦️' },
+        61: { desc: 'Slight rain', icon: '🌧️' }, 63: { desc: 'Moderate rain', icon: '🌧️' }, 65: { desc: 'Heavy rain', icon: '🌧️' },
+        71: { desc: 'Slight snow fall', icon: '🌨️' }, 73: { desc: 'Moderate snow fall', icon: '🌨️' }, 75: { desc: 'Heavy snow fall', icon: '🌨️' },
+        80: { desc: 'Slight rain showers', icon: '🌩️' }, 81: { desc: 'Moderate rain showers', icon: '🌩️' }, 82: { desc: 'Violent rain showers', icon: '🌩️' },
+        95: { desc: 'Thunderstorm', icon: '⛈️' }
+    };
+    const getWeatherInfo = code => weatherInfoMap[code] || { desc: 'Weather', icon: '❓' };
+
     async function fetchWeather(lat, lon, placeName) {
         $('weatherSummary').textContent = 'Loading...';
         $('weatherToday').innerHTML = '';
+        $('hourlyForecast').innerHTML = '';
         $('forecastDays').innerHTML = '';
         $('weatherLink').textContent = '';
         try {
-            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,precipitation_sum,precipitation_probability_max,windspeed_10m_max,sunrise,sunset&current_weather=true&timezone=auto`);
+            const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weathercode&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,precipitation_sum,precipitation_probability_max,windspeed_10m_max,sunrise,sunset,uv_index_max&current_weather=true&timezone=auto`;
+            const res = await fetch(apiUrl);
             const data = await res.json();
             
-            if (data.error) {
-                throw new Error(data.reason);
-            }
+            if (data.error) throw new Error(data.reason);
 
-            const weatherCodes = { 0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Depositing rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain', 71: 'Slight snow fall', 73: 'Moderate snow fall', 75: 'Heavy snow fall', 80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers', 95: 'Thunderstorm' };
-            const weatherIcons = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️', 51: '🌦️', 53: '🌦️', 55: '🌦️', 61: '🌧️', 63: '🌧️', 65: '🌧️', 71: '🌨️', 73: '🌨️', 75: '🌨️', 80: '🌩️', 81: '🌩️', 82: '🌩️', 95: '⛈️' };
-            
-            const today = data.daily;
-            const current = data.current_weather;
-            const todayCode = current.weathercode;
-            
-            $('weatherSummary').textContent = `${weatherCodes[todayCode] || 'Weather'} expected in ${placeName}.`;
-            
-            const formatTime = (iso) => new Date(iso).toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' });
+            renderCurrentWeather(data, placeName);
+            renderHourlyForecast(data);
+            renderDailyForecast(data);
 
-            $('weatherToday').innerHTML = `
-                <div class="weather-today-main">
-                    <div>
-                        <div class="temp">${Math.round(current.temperature)}°C</div>
-                        <div>Feels like ${Math.round(today.apparent_temperature_max[0])}°C</div>
-                    </div>
-                    <div class="icon">${weatherIcons[todayCode] || '❓'}</div>
-                </div>
-                <div class="weather-details">
-                    <div class="weather-detail-item" title="Max/Min Temp">
-                        <span>🌡️</span>
-                        <span>${Math.round(today.temperature_2m_max[0])}° / ${Math.round(today.temperature_2m_min[0])}°</span>
-                    </div>
-                    <div class="weather-detail-item" title="Precipitation">
-                        <span>💧</span>
-                        <span>${today.precipitation_probability_max[0]}% (${today.precipitation_sum[0].toFixed(1)}mm)</span>
-                    </div>
-                    <div class="weather-detail-item" title="Wind Speed">
-                        <span>💨</span>
-                        <span>${Math.round(today.windspeed_10m_max[0])} km/h</span>
-                    </div>
-                    <div class="weather-detail-item" title="Sunrise/Sunset">
-                        <span>☀️</span>
-                        <span>${formatTime(today.sunrise[0])} / ${formatTime(today.sunset[0])}</span>
-                    </div>
-                </div>
-            `;
-            
-            const forecastContainer = $('forecastDays');
-            forecastContainer.innerHTML = '';
-            for (let i = 1; i < 5; i++) {
-                const day = new Date(today.time[i]).toLocaleDateString('en-GB', { weekday: 'short' });
-                const code = today.weathercode[i];
-                let rainInfo = '';
-                if (today.precipitation_probability_max[i] > 15) {
-                    rainInfo = `<div class="rain-info">💧 ${today.precipitation_probability_max[i]}% (${today.precipitation_sum[i].toFixed(1)}mm)</div>`;
-                }
-                
-                forecastContainer.innerHTML += `
-                    <div class="col forecast-day">
-                        <div><strong>${day}</strong></div>
-                        <div class="fs-4">${weatherIcons[code] || '❓'}</div>
-                        <div>${Math.round(today.temperature_2m_max[i])}° / ${Math.round(today.temperature_2m_min[i])}°</div>
-                        ${rainInfo || '<div>&nbsp;</div>'}
-                    </div>
-                `;
-            }
-
-            $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
+            $('weatherLink').href = `https://www.google.com/search?q=weather+${encodeURIComponent(placeName)}`;
             $('weatherLink').textContent = `Detailed hourly forecast for ${placeName}`;
         } catch (err) {
             console.error(err);
@@ -480,6 +537,90 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function renderCurrentWeather(data, placeName) {
+        const { current_weather: current, daily } = data;
+        const todayInfo = getWeatherInfo(current.weathercode);
+        const formatTime = (iso) => new Date(iso).toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' });
+
+        $('weatherSummary').textContent = `${todayInfo.desc} expected in ${placeName}.`;
+
+        $('weatherToday').innerHTML = `
+            <div class="weather-today-main">
+                <div>
+                    <div class="temp">${Math.round(current.temperature)}°C</div>
+                    <div>Feels like ${Math.round(daily.apparent_temperature_max[0])}°C</div>
+                </div>
+                <div class="icon">${todayInfo.icon}</div>
+            </div>
+            <div class="weather-details">
+                <div class="weather-detail-item" title="Max/Min Temp">
+                    <i class="bi bi-thermometer-half"></i>
+                    <span>${Math.round(daily.temperature_2m_max[0])}° / ${Math.round(daily.temperature_2m_min[0])}°</span>
+                </div>
+                <div class="weather-detail-item" title="Precipitation">
+                    <i class="bi bi-cloud-drizzle"></i>
+                    <span>${daily.precipitation_probability_max[0]}% (${daily.precipitation_sum[0].toFixed(1)}mm)</span>
+                </div>
+                <div class="weather-detail-item" title="Wind Speed">
+                    <i class="bi bi-wind"></i>
+                    <span>${Math.round(daily.windspeed_10m_max[0])} km/h</span>
+                </div>
+                <div class="weather-detail-item" title="Sunrise/Sunset">
+                    <i class="bi bi-sunrise"></i>
+                    <span>${formatTime(daily.sunrise[0])} / ${formatTime(daily.sunset[0])}</span>
+                </div>
+                <div class="weather-detail-item" title="Max UV Index">
+                    <i class="bi bi-sun"></i>
+                    <span>${daily.uv_index_max[0].toFixed(1)}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderHourlyForecast(data) {
+        const { hourly } = data;
+        const now = new Date();
+        const currentHourIndex = hourly.time.findIndex(t => new Date(t) > now);
+        if (currentHourIndex === -1) return;
+
+        let hourlyHtml = '';
+        for (let i = currentHourIndex; i < currentHourIndex + 8 && i < hourly.time.length; i++) {
+            const time = new Date(hourly.time[i]).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            const temp = Math.round(hourly.temperature_2m[i]);
+            const weather = getWeatherInfo(hourly.weathercode[i]);
+            hourlyHtml += `
+                <div class="hourly-item">
+                    <div class="time">${time}</div>
+                    <div class="icon">${weather.icon}</div>
+                    <div class="temp">${temp}°C</div>
+                </div>
+            `;
+        }
+        $('hourlyForecast').innerHTML = hourlyHtml;
+    }
+
+    function renderDailyForecast(data) {
+        const { daily } = data;
+        const forecastContainer = $('forecastDays');
+        forecastContainer.innerHTML = '';
+        for (let i = 1; i < 5; i++) {
+            const day = new Date(daily.time[i]).toLocaleDateString('en-GB', { weekday: 'short' });
+            const weather = getWeatherInfo(daily.weathercode[i]);
+            let rainInfo = '';
+            if (daily.precipitation_probability_max[i] > 15) {
+                rainInfo = `<div class="rain-info">💧 ${daily.precipitation_probability_max[i]}% (${daily.precipitation_sum[i].toFixed(1)}mm)</div>`;
+            }
+            
+            forecastContainer.innerHTML += `
+                <div class="col forecast-day">
+                    <div><strong>${day}</strong></div>
+                    <div class="fs-4">${weather.icon}</div>
+                    <div>${Math.round(daily.temperature_2m_max[i])}° / ${Math.round(daily.temperature_2m_min[i])}°</div>
+                    ${rainInfo || '<div>&nbsp;</div>'}
+                </div>
+            `;
+        }
+    }
     
     // --- Elevation ---
     let elevationProfileCoords = [], elevationHoverMarker = null;
@@ -508,6 +649,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if(data.results && data.results.length > 1) {
                 renderElevationChart(data.results.map(r => r.elevation), totalDistanceKm);
             } else {
+                 // Fallback if elevation data is unavailable
+                 autoSelectProfile(totalDistanceKm, 0);
                  $('elevationProfile').innerHTML = '<div class="text-center text-muted">Elevation data unavailable.</div>';
             }
         } catch {
@@ -618,6 +761,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
         }
+
+        // Auto-select profile based on route characteristics
+        autoSelectProfile(totalDistanceKm, maxGrade);
 
         // --- 2. Render Statistics & Impact Suggestion ---
         $('elevationStats').innerHTML = `
@@ -757,10 +903,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- POI ---
-    $('showPOIBtn').addEventListener('click', () => {
+    showPOIBtn.addEventListener('click', () => {
         const section = $('poiSection');
-        const isVisible = section.style.display === 'none';
-        section.style.display = isVisible ? 'block' : 'none';
+        const isHidden = section.style.display === 'none';
+        section.style.display = isHidden ? 'block' : 'none';
+        showPOIBtn.setAttribute('aria-expanded', isHidden);
+
         if (!isVisible) {
             poiLayer.clearLayers();
             $('poiList').innerHTML = '';
@@ -904,7 +1052,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             timer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`https://api.openrouteservice.org/geocode/autocomplete?api_key=${ORS_API_KEY}&text=${encodeURIComponent(input.value)}`);
+                    const res = await fetch(`https://api.openrouteservice.org/geocode/autocomplete?api_key=${config.ORS_API_KEY}&text=${encodeURIComponent(input.value)}`);
                     if (!res.ok) throw new Error('API request failed');
                     const data = await res.json();
 
@@ -975,5 +1123,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- Initializer ---
+    applyProfile('shortRange'); // Apply default profile on load
     initializeLocations();
 });
