@@ -5,11 +5,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const config = {
         // --- FIX: Restored the original, working API Key ---
         ORS_API_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=',
-        LONG_ROUTE_THRESHOLD_KM: 150,
+        LONG_ROUTE_THRESHOLD_KM: 150
     };
 
     // --- Element Selectors ---
-    const inputs = ['tripDistance', 'electricDistance', 'fuelConsumption', 'electricConsumption', 'gasPrice', 'elecPrice'].map($);
+    const allInputIds = ['tripDistance', 'electricDistance', 'fuelConsumption', 'electricConsumption', 'gasPrice', 'elecPrice'];
+    const inputs = allInputIds.map($);
     const [tripDistance, electricDistance, fuelConsumption, electricConsumption, gasPrice, elecPrice] = inputs;
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let dElec = parseNumber(electricDistance);
         const fuelLper100 = parseNumber(fuelConsumption);
         const kmPerKwh = parseNumber(electricConsumption);
+        
         const priceGas = parseNumber(gasPrice);
         const priceElec = parseNumber(elecPrice);
 
@@ -76,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
         pctElec.textContent = pctE.toFixed(1) + '%';
         pctGas.textContent = pctG.toFixed(1) + '%';
         splitFill.style.width = Math.max(0, Math.min(100, pctE)) + '%';
+
 
         if (data.dist > 0) {
             summaryText.textContent = `Your ${Math.round(data.dist)} km trip will cost approx. ${fmt(data.total, true)}, saving you ${fmt(data.saved, true)} compared to a gasoline-only trip.`;
@@ -167,7 +170,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
     let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map);
 
     async function geocode(place) {
@@ -203,6 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
         $('elevationProfile').innerHTML = '';
         $('elevationStats').innerHTML = '';
         $('elevationImpact').innerHTML = '';
+        $('applyElevationBtn').style.display = 'none';
 
         try {
             const coords = await Promise.all(validPlaces.map(geocode));
@@ -302,7 +306,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const coordsLatLng = feature.geometry.coordinates.map(c => [c[1], c[0]]);
         fetchElevationProfile(coordsLatLng, km);
-        
+
+        // Update route styles
         routeLayers.forEach(layer => {
             const isSelected = layer.featureData.properties.summary.distance === feature.properties.summary.distance;
             layer.setStyle({
@@ -529,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function () {
             renderHourlyForecast(data);
             renderDailyForecast(data);
 
-            $('weatherLink').href = `https://www.google.com/search?q=weather+${encodeURIComponent(placeName)}`;
+            $('weatherLink').href = `https://www.google.com/search?q=wetteronline.de+${encodeURIComponent(placeName)}`;
             $('weatherLink').textContent = `Detailed hourly forecast for ${placeName}`;
         } catch (err) {
             console.error(err);
@@ -660,12 +665,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function calculateElevationImpact(totalAscent, totalDescent, totalDistanceKm) {
         if (totalDistanceKm < 1 || totalAscent < 20) {
+            const parseRange = (rangeStr) => {
+                const [min, max] = rangeStr.split('-').map(parseFloat);
+                return 1 + ((min + max) / 2 / 100); // Return a multiplier, e.g., 1.01 for 1%
+            };
+
             return {
                 level: 'Relatively Flat',
                 change: 'none',
                 gas: '0-2%',
                 elec: '0-2%',
-                reason: 'This route is relatively flat, so elevation will have minimal impact on consumption.'
+                reason: 'This route is relatively flat, so elevation will have minimal impact on consumption.',
+                gasFactor: parseRange('0-2%'),
+                elecFactor: parseRange('0-2%')
             };
         }
     
@@ -674,62 +686,68 @@ document.addEventListener('DOMContentLoaded', function () {
         const netClimbRate = netElevationChange / totalDistanceKm; // m/km, positive is uphill
     
         const IS_ROUND_TRIP_LIKE = Math.abs(netElevationChange) < (totalAscent * 0.15); // Net change is less than 15% of total climb
-    
+
+        const parseAndCreateFactors = (gasRange, elecRange, isDecrease = false) => {
+            const sign = isDecrease ? -1 : 1;
+            const [gMin, gMax] = gasRange.replace('%', '').replace('+', '').split('-').map(parseFloat);
+            const [eMin, eMax] = elecRange.replace('%', '').replace('+', '').split('-').map(parseFloat);
+            return {
+                gasFactor: 1 + (sign * ((gMin + (gMax || gMin)) / 2 / 100)),
+                elecFactor: 1 + (sign * ((eMin + (eMax || eMin)) / 2 / 100))
+            };
+        };
+
         // --- Case 1: Round Trip or Balanced Rolling Hills ---
         if (IS_ROUND_TRIP_LIKE) {
             const reason = 'This is a balanced or round trip. Energy used for climbing is not fully recovered during descents, leading to higher consumption.';
             if (grossClimbRate > 30) { // Very Hilly (e.g., > 3000m climb over 100km)
-                return { level: 'Very Hilly', change: 'increase', gas: '15-25%', elec: '10-20%', reason };
+                return { level: 'Very Hilly', change: 'increase', gas: '15-25%', elec: '10-20%', reason, ...parseAndCreateFactors('15-25', '10-20') };
             }
             if (grossClimbRate > 15) { // Moderately Hilly
-                return { level: 'Rolling Hills', change: 'increase', gas: '8-15%', elec: '5-12%', reason };
+                return { level: 'Rolling Hills', change: 'increase', gas: '8-15%', elec: '5-12%', reason, ...parseAndCreateFactors('8-15', '5-12') };
             }
             // Gentle Hills
-            return { level: 'Gentle Hills', change: 'increase', gas: '3-8%', elec: '2-6%', reason };
+            return { level: 'Gentle Hills', change: 'increase', gas: '3-8%', elec: '2-6%', reason, ...parseAndCreateFactors('3-8', '2-6') };
         }
     
         // --- Case 2: One-Way Primarily Uphill Trip ---
         if (netClimbRate > 5) { // Net climb of >5m per km
             const reason = 'This route has a significant net climb, requiring much more energy to overcome gravity. Note: your return trip would be very efficient.';
             if (netClimbRate > 25) { // Very Steep Uphill
-                return { level: 'Steep Uphill', change: 'increase', gas: '30%+', elec: '25%+', reason };
+                return { level: 'Steep Uphill', change: 'increase', gas: '30%+', elec: '25%+', reason, ...parseAndCreateFactors('30', '25') };
             }
             if (netClimbRate > 10) { // Moderate Uphill
-                return { level: 'Moderate Uphill', change: 'increase', gas: '15-30%', elec: '12-25%', reason };
+                return { level: 'Moderate Uphill', change: 'increase', gas: '15-30%', elec: '12-25%', reason, ...parseAndCreateFactors('15-30', '12-25') };
             }
              // Gentle Uphill
-            return { level: 'Gentle Uphill', change: 'increase', gas: '5-15%', elec: '5-12%', reason };
+            return { level: 'Gentle Uphill', change: 'increase', gas: '5-15%', elec: '5-12%', reason, ...parseAndCreateFactors('5-15', '5-12') };
         }
     
         // --- Case 3: One-Way Primarily Downhill Trip ---
         if (netClimbRate < -5) { // Net descent of >5m per km
             const reason = 'This route is primarily downhill. A PHEV can recover significant energy via regenerative braking. Note: your return trip would use much more energy.';
             if (netClimbRate < -25) { // Very Steep Downhill
-                return { level: 'Steep Descent', change: 'decrease', gas: '15-25%', elec: '30-60%+', reason };
+                return { level: 'Steep Descent', change: 'decrease', gas: '15-25%', elec: '30-60%+', reason, ...parseAndCreateFactors('15-25', '30-60', true) };
             }
             if (netClimbRate < -10) { // Moderate Downhill
-                return { level: 'Moderate Descent', change: 'decrease', gas: '10-20%', elec: '15-30%', reason };
+                return { level: 'Moderate Descent', change: 'decrease', gas: '10-20%', elec: '15-30%', reason, ...parseAndCreateFactors('10-20', '15-30', true) };
             }
              // Gentle Downhill
-            return { level: 'Gentle Descent', change: 'decrease', gas: '5-10%', elec: '5-15%', reason };
+            return { level: 'Gentle Descent', change: 'decrease', gas: '5-10%', elec: '5-15%', reason, ...parseAndCreateFactors('5-10', '5-15', true) };
         }
         
         // --- Fallback for minor inclines/declines ---
         if (netClimbRate > 0) { // Slight net uphill
             return {
-                level: 'Slightly Uphill',
-                change: 'increase',
-                gas: '2-5%',
-                elec: '1-4%',
-                reason: 'The route has a minor net incline, which will slightly increase overall consumption.'
+                level: 'Slightly Uphill', change: 'increase', gas: '2-5%', elec: '1-4%',
+                reason: 'The route has a minor net incline, which will slightly increase overall consumption.',
+                ...parseAndCreateFactors('2-5', '1-4')
             };
         } else { // Slight net downhill
              return {
-                level: 'Slightly Downhill',
-                change: 'decrease',
-                gas: '1-4%',
-                elec: '2-6%',
-                reason: 'The route has a minor net descent, allowing for some energy savings through coasting and regeneration.'
+                level: 'Slightly Downhill', change: 'decrease', gas: '1-4%', elec: '2-6%',
+                reason: 'The route has a minor net descent, allowing for some energy savings through coasting and regeneration.',
+                ...parseAndCreateFactors('1-4', '2-6', true)
             };
         }
     }
@@ -782,6 +800,25 @@ document.addEventListener('DOMContentLoaded', function () {
         `;
         
         const impact = calculateElevationImpact(totalAscent, totalDescent, totalDistanceKm);
+        const applyBtn = $('applyElevationBtn');
+
+        if (impact.change !== 'none') {
+            applyBtn.style.display = 'block';
+            applyBtn.disabled = false;
+            applyBtn.innerHTML = 'Apply<br>Adjustments';
+
+            // Use .onclick to easily overwrite the listener for each new route
+            applyBtn.onclick = () => {
+                const currentFuel = parseNumber(fuelConsumption);
+                const currentElec = parseNumber(electricConsumption);
+
+                fuelConsumption.value = (currentFuel * impact.gasFactor).toFixed(1);
+                electricConsumption.value = (currentElec / impact.elecFactor).toFixed(1); // Divide because unit is km/kWh
+                
+                applyBtn.disabled = true;
+                applyBtn.innerHTML = 'Applied!';
+            };
+        }
         
         const alertType = impact.change === 'increase' ? 'info' : (impact.change === 'decrease' ? 'success' : 'secondary');
         const iconType = impact.change === 'increase' ? 'info-circle-fill' : (impact.change === 'decrease' ? 'check-circle-fill' : 'lightbulb');
@@ -811,21 +848,32 @@ document.addEventListener('DOMContentLoaded', function () {
         const w = container.clientWidth, h = 120, n = elevations.length;
         const margin = 32, chartW = w - margin - 8, chartH = h - margin;
         const max = Math.max(...elevations), min = Math.min(...elevations);
-
-        let points = '', hoverCircles = '', gridLines = '';
         const yRange = max - min;
         
+        let pathSegments = '', pointsForArea = '', hoverCircles = '', gridLines = '';
+
         for (let i = 0; i <= 4; i++) {
             const y = chartH - (i/4) * (chartH - 8);
             gridLines += `<line class="elevation-grid-line" x1="${margin}" y1="${y}" x2="${margin+chartW}" y2="${y}"></line>`;
         }
 
-        for (let i = 0; i < n; i++) {
-            const x = margin + (i / (n - 1)) * chartW;
-            const y = chartH - ((elevations[i] - min) / (yRange + 1e-6)) * (chartH - 8);
-            points += `${x},${y} `;
-            hoverCircles += `<circle class="elev-hover" data-idx="${i}" cx="${x}" cy="${y}" r="8" fill="transparent" />`;
+        for (let i = 1; i < n; i++) {
+            const x1 = margin + ((i - 1) / (n - 1)) * chartW;
+            const y1 = chartH - ((elevations[i - 1] - min) / (yRange + 1e-6)) * (chartH - 8);
+            const x2 = margin + (i / (n - 1)) * chartW;
+            const y2 = chartH - ((elevations[i] - min) / (yRange + 1e-6)) * (chartH - 8);
+
+            if (i === 1) pointsForArea += `${x1},${y1} `;
+            pointsForArea += `${x2},${y2} `;
+
+            const elevChange = elevations[i] - elevations[i-1];
+            const grade = segmentDistanceKm > 0 ? (elevChange / (segmentDistanceKm * 1000)) * 100 : 0;
+            const color = getGradeColor(grade);
+
+            pathSegments += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
+            hoverCircles += `<circle class="elev-hover" data-idx="${i-1}" cx="${x1}" cy="${y1}" r="8" fill="transparent" />`;
         }
+        if (n > 0) hoverCircles += `<circle class="elev-hover" data-idx="${n-1}" cx="${margin + chartW}" cy="${chartH - ((elevations[n-1] - min) / (yRange + 1e-6)) * (chartH - 8)}" r="8" fill="transparent" />`;
 
         const svgContent = `
             <svg width="${w}" height="${h}" style="touch-action:none;user-select:none;">
@@ -836,8 +884,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     </linearGradient>
                 </defs>
                 ${gridLines}
-                <path d="M${margin},${chartH} L${points} L${margin + chartW},${chartH} Z" fill="url(#elevGradient)"/>
-                <path d="M${points.trim().split(' ')[0]} L${points}" fill="none" stroke="#0d6efd" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                <path d="M${margin},${chartH} L${pointsForArea} L${margin + chartW},${chartH} Z" fill="url(#elevGradient)"/>
+                ${pathSegments}
                 ${hoverCircles}
                 <g id="elevation-tooltip" style="visibility: hidden;">
                     <line class="elevation-tooltip-line" y1="8" y2="${chartH}"></line>
@@ -960,7 +1008,7 @@ document.addEventListener('DOMContentLoaded', function () {
         
         const categoryColors = { museum: '#6f42c1', historic: '#d63384', viewpoint: '#fd7e14', park: '#198754' };
 
-        for (let i = 0; i < coords.length; i++) {
+        for (let i = 1; i < coords.length; i++) { // IMPROVEMENT: Start from index 1 to skip departure
             const [lon, lat] = coords[i];
             const finalQuery = queryTemplate.replace(/\{\{lat\}\}/g, lat).replace(/\{\{lon\}\}/g, lon).replace(/\{\{radius\}\}/g, radiusM).replace(/\{\{limit\}\}/g, poiCount);
             try {
@@ -986,6 +1034,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         const dist = haversineDistance([lon, lat], [poiLon, poiLat]);
 
+                        let linksHtml = '';
+                        const website = poi.tags?.website;
+                        const wikipedia = poi.tags?.wikipedia;
+
+                        if (website || wikipedia) {
+                            linksHtml += '<div class="poi-links mt-1">';
+                            if (website) {
+                                linksHtml += `<a href="${website}" target="_blank" rel="noopener noreferrer"><i class="bi bi-link-45deg"></i> Website</a>`;
+                            }
+                            if (wikipedia) {
+                                const [lang, page] = wikipedia.split(':');
+                                const wikiUrl = `https://${lang || 'en'}.wikipedia.org/wiki/${encodeURIComponent(page)}`;
+                                linksHtml += `<a href="${wikiUrl}" target="_blank" rel="noopener noreferrer"><i class="bi bi-wikipedia"></i> Wikipedia</a>`;
+                            }
+                            linksHtml += '</div>';
+                        }
+
                         html += `
                             <div class="list-group-item list-group-item-action poi-list-item" data-poi-id="${poiId}">
                                 <div class="d-flex w-100 justify-content-between">
@@ -993,6 +1058,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     <small>${dist.toFixed(1)} km</small>
                                 </div>
                                 <div class="poi-category">${category}</div>
+                                ${linksHtml}
                             </div>`;
                         
                         const marker = L.marker([poiLat, poiLon], {
@@ -1120,6 +1186,14 @@ document.addEventListener('DOMContentLoaded', function () {
                   Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    }
+
+    function getGradeColor(grade) {
+        if (grade < -0.5) return '#28a745'; // Downhill (Green)
+        if (grade < 2) return '#0d6efd';   // Flat/Gentle (Blue)
+        if (grade < 5) return '#ffc107';   // Moderate (Yellow)
+        if (grade < 8) return '#fd7e14';   // Steep (Orange)
+        return '#dc3545';                 // Very Steep (Red)
     }
 
     // --- Initializer ---
