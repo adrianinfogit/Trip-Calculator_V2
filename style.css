@@ -19,10 +19,14 @@ body {
     background-color: var(--background-color);
 }
 
-/* Set a max-width for the main container to achieve the 75% overall size */
+/* IMPROVEMENT: Make the container responsive for mobile devices.
+   The previous `min-width: 1200px` prevented the layout from adapting to smaller screens.
+   Now, it will use the full width on smaller screens and be capped at 1400px on larger ones. */
 .container {
-    max-width: 75vw;
-    min-width: 1200px; /* Prevent it from becoming too cramped on smaller large screens */
+    width: 100%;
+    max-width: 1400px; /* Adjust this value as needed for your preferred max desktop width */
+    margin-left: auto;
+    margin-right: auto;
 }
 
 #map {
