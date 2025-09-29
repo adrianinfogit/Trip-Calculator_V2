@@ -32,8 +32,14 @@
                             <!-- Location rows will be dynamically inserted here by JS -->
                         </div>
                         
-                        <div class="mt-3">
+                        <div class="mt-3 d-flex justify-content-between align-items-stretch gap-2">
                             <button id="addStopBtn" class="btn btn-outline-secondary btn-sm">+ Add Stop</button>
+                            <button id="calcRoute" class="btn btn-primary" style="flex-basis: 75px; flex-grow: 0;">Calculate<br>Route</button>
+                            <div id="tripTime" class="trip-time-badge flex-grow-1 text-center">0h 00m</div>
+                            <button id="googleMapsBtn" class="btn btn-success">
+                                <span class="btn-text">Google Maps</span>
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            </button>
                         </div>
 
                         <hr class="mt-4">
@@ -83,23 +89,13 @@
                             </div>
                         </div>
 
-                        <div class="mt-4 pt-4">
-                            <div class="d-flex align-items-center">
-                                <button id="calcRoute" class="btn btn-primary btn-lg">Calculate Route</button>
-                                <div id="tripTime" class="trip-time-badge ms-3">0h 00m</div>
-                            </div>
-                            <div class="alert alert-danger mt-3" id="warn" style="display: none;" role="alert"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                        <hr class="mt-4">
 
-            <!-- Column 2: Vehicle Info -->
-            <div class="col-lg-2">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body p-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="card-title mb-0">Vehicle Profile</h5>
+                            <h5 class="card-title mb-0">Vehicle & Cost</h5>
+                            <button class="btn btn-sm btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#vehicleDetailsCollapse" aria-expanded="false" aria-controls="vehicleDetailsCollapse">
+                                <i class="bi bi-sliders"></i> Adjust
+                            </button>
                         </div>
                         <div id="profileSelector" class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Vehicle Profiles">
                             <input type="radio" class="btn-check" name="vehicleProfile" id="profile1" value="shortRange" autocomplete="off" checked>
@@ -113,48 +109,43 @@
                         </div>
 
                         <div class="d-grid gap-3">
-                            <div>
-                                <label for="tripDistance" class="form-label">Trip Distance</label>
-                                <div class="input-group">
-                                    <input id="tripDistance" type="number" class="form-control" value="0" min="0">
-                                    <span class="input-group-text">km</span>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label for="tripDistance" class="form-label">Trip Distance</label>
+                                    <div class="input-group">
+                                        <input id="tripDistance" type="number" class="form-control" value="0" min="0">
+                                        <span class="input-group-text">km</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label for="electricDistance" class="form-label">Electric Range</label>
+                                    <div class="input-group">
+                                        <input id="electricDistance" type="number" class="form-control" value="0" min="0">
+                                        <span class="input-group-text">km</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <label for="electricDistance" class="form-label">Electric Range</label>
-                                <div class="input-group">
-                                    <input id="electricDistance" type="number" class="form-control" value="0" min="0">
-                                    <span class="input-group-text">km</span>
+                            <div class="collapse" id="vehicleDetailsCollapse">
+                                <div class="d-grid gap-3 mt-3">
+                                    <hr class="my-1">
+                                    <h6 class="text-muted mb-0">Vehicle Efficiency</h6>
+                                    <div class="row g-2"><div class="col-6"><label for="fuelConsumption" class="form-label">Fuel</label><div class="input-group"><input id="fuelConsumption" type="number" class="form-control" value="8" min="0" step="0.1"><span class="input-group-text">L/100</span></div></div><div class="col-6"><label for="electricConsumption" class="form-label">Electric</label><div class="input-group"><input id="electricConsumption" type="number" class="form-control" value="4.2" min="0.1" step="0.1"><span class="input-group-text">km/kWh</span></div></div></div>
+                                    <hr class="my-1">
+                                    <h6 class="text-muted mb-0">Energy Prices</h6>
+                                    <div class="row g-2"><div class="col-6"><label for="gasPrice" class="form-label">Gasoline</label><div class="input-group"><span class="input-group-text">€</span><input id="gasPrice" type="number" class="form-control" value="1.8" min="0" step="0.01"><span class="input-group-text">/L</span></div></div><div class="col-6"><label for="elecPrice" class="form-label">Electricity</label><div class="input-group"><span class="input-group-text">€</span><input id="elecPrice" type="number" class="form-control" value="0.45" min="0" step="0.01"><span class="input-group-text">/kWh</span></div></div></div>
                                 </div>
                             </div>
-                            <hr class="my-1">
-                            <h6 class="text-muted mb-0">Vehicle Efficiency</h6>
-                            <div>
-                                <label for="fuelConsumption" class="form-label">Fuel Consumption</label>
-                                <div class="input-group">
-                                    <input id="fuelConsumption" type="number" class="form-control" value="8" min="0" step="0.1">
-                                    <span class="input-group-text">L/100km</span>
-                                </div>
-                            </div>
-                            <div>
-                                <label for="electricConsumption" class="form-label">Electric Consumption</label>
-                                <div class="input-group">
-                                    <input id="electricConsumption" type="number" class="form-control" value="4.2" min="0.1" step="0.1">
-                                    <span class="input-group-text">km/kWh</span>
-                                </div>
-                            </div>
+                        </div>
 
-                            <hr class="my-1">
-                            <h6 class="text-muted mb-0">Energy Prices</h6>
-                            <div><label for="gasPrice" class="form-label">Gasoline Price</label><div class="input-group"><span class="input-group-text">€</span><input id="gasPrice" type="number" class="form-control" value="1.8" min="0" step="0.01"><span class="input-group-text">/ L</span></div></div>
-                            <div><label for="elecPrice" class="form-label">Electricity Price</label><div class="input-group"><span class="input-group-text">€</span><input id="elecPrice" type="number" class="form-control" value="0.45" min="0" step="0.01"><span class="input-group-text">/ kWh</span></div></div>
+                        <div class="mt-3">
+                            <div class="alert alert-danger" id="warn" style="display: none;" role="alert"></div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Column 3: Results -->
-            <div class="col-lg-3">
+            <div class="col-lg-2">
                  <div class="card shadow-sm h-100">
                     <div class="card-body p-4">
                         <h5 class="card-title">Results</h5>
@@ -236,26 +227,58 @@
             </div>
 
             <!-- Column 4: Visualization -->
-            <div class="col-lg-4">
+            <div class="col-lg-7">
                 <div class="card shadow-sm h-100">
                     <div class="card-body p-4">
                         <h5 class="card-title">Route Visualization</h5>
-                         <div id="map" class="mt-3"></div>
-                         <section id="elevationSection" class="mt-3">
-                            <div id="elevationProfile"></div>
-                             <div class="d-flex align-items-center gap-2 mt-2">
-                                <div id="elevationStats" class="flex-grow-1"></div>
-                                <button id="applyElevationBtn" class="btn btn-outline-primary btn-sm" style="display: none;">Apply<br>Adjustments</button>
+                        <div class="row mt-3">
+                            <div class="col-lg-7">
+                                <div id="map"></div>
                             </div>
-                            <div id="elevationImpact" class="mt-3"></div>
-                            <div id="elevationLegend" class="d-flex justify-content-center gap-3 mt-2" style="font-size: 0.8em;">
-                                <span><i class="bi bi-square-fill" style="color: #28a745;"></i> Downhill</span>
-                                <span><i class="bi bi-square-fill" style="color: #0d6efd;"></i> Flat</span>
-                                <span><i class="bi bi-square-fill" style="color: #ffc107;"></i> Mod. Climb</span>
-                                <span><i class="bi bi-square-fill" style="color: #fd7e14;"></i> Steep</span>
-                                <span><i class="bi bi-square-fill" style="color: #dc3545;"></i> Very Steep</span>
+                            <div class="col-lg-5">
+                                <section id="elevationSection">
+                                    <div id="elevationProfile"></div>
+                                    <div class="d-flex align-items-center gap-2 mt-2">
+                                        <div id="elevationStats" class="flex-grow-1"></div>
+                                        <button id="applyElevationBtn" class="btn btn-outline-primary btn-sm" style="display: none;">Apply<br>Adjustments</button>
+                                    </div>
+                                    <div id="elevationImpact" class="mt-3"></div>
+                                    <div id="elevationLegend" class="d-flex justify-content-center flex-wrap gap-3 mt-2" style="font-size: 0.8em;">
+                                        <span><i class="bi bi-square-fill" style="color: #28a745;"></i> Downhill</span>
+                                        <span><i class="bi bi-square-fill" style="color: #0d6efd;"></i> Flat</span>
+                                        <span><i class="bi bi-square-fill" style="color: #ffc107;"></i> Mod. Climb</span>
+                                        <span><i class="bi bi-square-fill" style="color: #fd7e14;"></i> Steep</span>
+                                        <span><i class="bi bi-square-fill" style="color: #dc3545;"></i> Very Steep</span>
+                                    </div>
+                                </section>
                             </div>
-                         </section>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Tourist Attractions</h5>
+                            <button id="showPOIBtn" class="btn btn-info btn-sm" data-bs-toggle="collapse" data-bs-target="#poiControls" aria-expanded="false" aria-controls="poiControls">
+                                <i class="bi bi-search"></i> Find Attractions
+                            </button>
+                        </div>
+                        <div class="collapse mt-2" id="poiControls">
+                            <div class="d-flex align-items-center flex-wrap gap-3 p-2 rounded" style="background-color: var(--background-color);">
+                                <div><label for="poiRadius" class="form-label small mb-0 me-1">Radius</label><input id="poiRadius" type="number" value="5" min="1" class="form-control form-control-sm" style="width: 70px;"></div>
+                                <div><label for="poiCount" class="form-label small mb-0 me-1">Max</label><input id="poiCount" type="number" value="5" min="1" class="form-control form-control-sm" style="width: 70px;"></div>
+                                <div class="dropdown">
+                                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="poiCategoryDropdown" data-bs-toggle="dropdown" aria-expanded="false">Categories</button>
+                                    <div class="dropdown-menu p-2" aria-labelledby="poiCategoryDropdown">
+                                        <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="museum" id="catMuseum" checked><label class="form-check-label" for="catMuseum">Museums</label></div>
+                                        <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="historic" id="catHistoric" checked><label class="form-check-label" for="catHistoric">Historic</label></div>
+                                        <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="viewpoint" id="catViewpoint" checked><label class="form-check-label" for="catViewpoint">Viewpoints</label></div>
+                                        <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="park" id="catPark" checked><label class="form-check-label" for="catPark">Parks</label></div>
+                                    </div>
+                                </div>
+                                <button id="searchPOIBtn" class="btn btn-primary btn-sm ms-auto">Find</button>
+                            </div>
+                        </div>
+                        <div id="poiList" class="poi-list-container mt-3"></div>
                     </div>
                 </div>
             </div>
@@ -263,7 +286,7 @@
 
         <!-- Second row for Weather and POI cards -->
         <div class="row g-3 mt-1">
-             <div class="col-lg-6">
+             <div class="col-lg-12">
                 <div class="card shadow-sm">
                     <div class="card-body p-4">
                         <h5 class="card-title mb-3">Destination Weather</h5>
@@ -277,30 +300,6 @@
                     </div>
                 </div>
              </div>
-             <div class="col-lg-6">
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <h5 class="card-title">Tourist Attractions</h5>
-                        <button id="showPOIBtn" class="btn btn-info mt-2" aria-controls="poiSection" aria-expanded="false">Show/Hide Attractions</button>
-                        <section id="poiSection" style="display: none;" class="mt-3">
-                            <div class="d-flex gap-3 mb-3">
-                                <div><label for="poiRadius" class="form-label">Radius (km)</label><input id="poiRadius" type="number" value="5" min="1" class="form-control"></div>
-                                <div><label for="poiCount" class="form-label">Max POIs per Stop</label><input id="poiCount" type="number" value="5" min="1" class="form-control"></div>
-                            </div>
-                            <label class="form-label d-block">Filter by Category:</label>
-                            <div class="d-flex flex-wrap gap-2 mt-1">
-                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="museum" id="catMuseum" checked><label class="form-check-label" for="catMuseum">Museums</label></div>
-                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="historic" id="catHistoric" checked><label class="form-check-label" for="catHistoric">Historic</label></div>
-                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="viewpoint" id="catViewpoint" checked><label class="form-check-label" for="catViewpoint">Viewpoints</label></div>
-                                <div class="form-check"><input class="form-check-input poi-category" type="checkbox" value="park" id="catPark" checked><label class="form-check-label" for="catPark">Parks</label></div>
-                            </div>
-                            <button id="searchPOIBtn" class="btn btn-primary mt-3">Find Attractions</button>
-                            <hr>
-                            <div id="poiList" class="poi-list-container"></div>
-                        </section>
-                    </div>
-                </div>
-            </div>
         </div>
     </main>
 
