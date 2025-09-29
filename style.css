@@ -180,6 +180,35 @@ body {
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
+/* IMPROVEMENT: Create a container for the horizontal forecast slider */
+.hourly-forecast-container {
+    position: relative;
+}
+
+.hourly-forecast-container .scroll-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-weight: bold;
+    cursor: pointer;
+    display: none; /* Hidden by default, shown on larger screens */
+}
+
+@media (min-width: 992px) {
+    .hourly-forecast-container:hover .scroll-btn {
+        display: block;
+    }
+}
+
+.hourly-forecast-container .scroll-btn.left { left: -15px; }
+.hourly-forecast-container .scroll-btn.right { right: -15px; }
+
 .hourly-item {
     display: inline-block;
     text-align: center;
@@ -188,7 +217,7 @@ body {
     background-color: var(--background-color);
     border: 1px solid var(--border-color);
     margin-right: 0.5rem;
-    width: 70px;
+    width: 75px;
     font-size: 0.9rem;
 }
 
