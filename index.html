@@ -16,9 +16,9 @@
 <body>
     <main class="container mt-2 px-4">
         <div class="row g-3">
-            
+
             <!-- Column 1: Route Planner -->
-            <div class="col-lg-3">
+            <div class="col-12 col-lg-3 order-1">
                 <div class="card shadow-sm h-100">
                     <div class="card-body p-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -28,11 +28,11 @@
                             </button>
                         </div>
                         
-                        <div id="locationsContainer" class="d-grid gap-3">
+                        <div id="locationsContainer" class="d-grid gap-2">
                             <!-- Location rows will be dynamically inserted here by JS -->
                         </div>
                         
-                        <div class="mt-3 d-flex justify-content-between align-items-stretch gap-2">
+                        <div class="mt-3 d-flex flex-wrap justify-content-between align-items-stretch gap-2">
                             <button id="addStopBtn" class="btn btn-outline-secondary btn-sm">+ Add Stop</button>
                             <button id="calcRoute" class="btn btn-primary" style="flex-basis: 75px; flex-grow: 0;">Calculate<br>Route</button>
                             <div id="tripTime" class="trip-time-badge flex-grow-1 text-center">0h 00m</div>
@@ -144,8 +144,8 @@
                 </div>
             </div>
 
-            <!-- Column 3: Results -->
-            <div class="col-lg-2">
+            <!-- Column 2: Results -->
+            <div class="col-12 col-md-6 col-lg-2 order-3 order-lg-2">
                  <div class="card shadow-sm h-100">
                     <div class="card-body p-4">
                         <h5 class="card-title">Results</h5>
@@ -226,9 +226,9 @@
                 </div>
             </div>
 
-            <!-- Column 4: Visualization -->
-            <div class="col-lg-7">
-                <div class="card shadow-sm h-100">
+            <!-- Column 3: Visualization -->
+            <div class="col-12 col-lg-7 order-2 order-lg-3">
+                <div class="card shadow-sm">
                     <div class="card-body p-4">
                         <h5 class="card-title">Route Visualization</h5>
                         <div class="row mt-3">
@@ -282,11 +282,9 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Second row for Weather and POI cards -->
-        <div class="row g-3 mt-1">
-             <div class="col-lg-12">
+            <!-- Column 4: Weather -->
+            <div class="col-12 col-md-6 col-lg-12 order-4">
                 <div class="card shadow-sm">
                     <div class="card-body p-4">
                         <h5 class="card-title mb-3">Destination Weather</h5>
@@ -299,7 +297,7 @@
                         </section>
                     </div>
                 </div>
-             </div>
+            </div>
         </div>
     </main>
 
