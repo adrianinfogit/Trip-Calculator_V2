@@ -44,6 +44,30 @@
                             </button>
                         </div>
 
+                        <div class="row g-2 mt-3">
+                            <div class="col-4">
+                                <label for="fromDate" class="form-label">From date</label>
+                                <input type="date" id="fromDate" class="form-control">
+                            </div>
+                            <div class="col-4">
+                                <label for="toDate" class="form-label">To date</label>
+                                <input type="date" id="toDate" class="form-control">
+                            </div>
+                            <div class="col-4">
+                                <label for="passengers" class="form-label">Passengers</label>
+                                <input type="number" id="passengers" class="form-control" value="3" min="1">
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mt-3">
+                            <div class="col-6 d-grid">
+                                <button id="bookingBtn" class="btn btn-info"><i class="bi bi-calendar-check"></i> Booking</button>
+                            </div>
+                            <div class="col-6 d-grid">
+                                <button id="flightsBtn" class="btn btn-warning"><i class="bi bi-airplane"></i> Flights</button>
+                            </div>
+                        </div>
+
                         <hr class="mt-4">
 
                         <div class="d-flex justify-content-between align-items-center">
@@ -283,6 +307,23 @@
                             </div>
                         </div>
                         <div id="poiList" class="poi-list-container mt-3"></div>
+                        
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Charging Stations</h5>
+                            <button id="showChargingBtn" class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#chargingControls" aria-expanded="false" aria-controls="chargingControls">
+                                <i class="bi bi-ev-station"></i> Find Stations
+                            </button>
+                        </div>
+                        <div class="collapse mt-2" id="chargingControls">
+                            <div class="d-flex align-items-center flex-wrap gap-3 p-2 rounded" style="background-color: var(--background-color);">
+                                <div><label for="chargingRadius" class="form-label small mb-0 me-1">Radius (km)</label><input id="chargingRadius" type="number" value="5" min="1" class="form-control form-control-sm" style="width: 70px;"></div>
+                                <div><label for="chargingCount" class="form-label small mb-0 me-1">Max</label><input id="chargingCount" type="number" value="10" min="1" class="form-control form-control-sm" style="width: 70px;"></div>
+                                <button id="searchChargingBtn" class="btn btn-primary btn-sm ms-auto">Find</button>
+                            </div>
+                        </div>
+                        <div id="chargingList" class="poi-list-container mt-3"></div>
                     </div>
                 </div>
             </div>
