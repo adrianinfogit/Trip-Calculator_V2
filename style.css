@@ -14,6 +14,14 @@ html {
     font-size: 11.2px; /* 80% of the previous 14px value */
 }
 
+/* IMPROVEMENT: Increase base font size on mobile for better readability.
+   This makes the UI more comfortable to use on smaller screens. */
+@media (max-width: 768px) {
+    html {
+        font-size: 13px; /* A more readable size for mobile */
+    }
+}
+
 body {
     font-size: 1rem; /* Inherit the base font size from html */
     background-color: var(--background-color);
