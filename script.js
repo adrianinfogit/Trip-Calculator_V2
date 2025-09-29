@@ -594,7 +594,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const temp = Math.round(hourly.temperature_2m[i]);
             const weather = getWeatherInfo(hourly.weathercode[i]);
             hourlyHtml += `
-                <div class="hourly-item">
+                <div class="hourly-item" title="${weather.desc}">
                     <div class="time">${time}</div>
                     <div class="icon">${weather.icon}</div>
                     <div class="temp">${temp}°C</div>
@@ -1196,7 +1196,22 @@ document.addEventListener('DOMContentLoaded', function () {
         return '#dc3545';                 // Very Steep (Red)
     }
 
+    function setupHourlyForecastSlider() {
+        const container = document.querySelector('.hourly-forecast-container');
+        const forecastEl = $('hourlyForecast');
+        const leftBtn = container.querySelector('.scroll-btn.left');
+        const rightBtn = container.querySelector('.scroll-btn.right');
+        const scrollAmount = 300; // Amount to scroll in pixels
+
+        leftBtn.addEventListener('click', () => {
+            forecastEl.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+        });
+        rightBtn.addEventListener('click', () => {
+            forecastEl.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        });
+    }
     // --- Initializer ---
     applyProfile('shortRange'); // Apply default profile on load
     initializeLocations();
+    setupHourlyForecastSlider();
 });
