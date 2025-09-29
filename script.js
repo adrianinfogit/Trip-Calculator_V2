@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const config = {
         // --- FIX: Restored the original, working API Key ---
         ORS_API_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=',
+        OCM_API_KEY: 'c8a5035b-433b-477b-8902-b2809e36e133', // OpenChargeMap API Key
         LONG_ROUTE_THRESHOLD_KM: 150
     };
 
@@ -14,7 +15,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const [tripDistance, electricDistance, fuelConsumption, electricConsumption, gasPrice, elecPrice] = inputs;
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
-    const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost'), splitFill = $('splitFill'), warn = $('warn');
+    const fromDate = $('fromDate'), toDate = $('toDate'), passengers = $('passengers');
+    const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost'), splitFill = $('splitFill'), warn = $('warn'), bookingBtn = $('bookingBtn'), flightsBtn = $('flightsBtn');
     const locationsContainer = $('locationsContainer'), showPOIBtn = $('showPOIBtn');
 
     // --- Cost Calculation ---
@@ -171,12 +173,19 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
-    let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map);
+    let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map), chargingStationsLayer = L.layerGroup().addTo(map);
 
     async function geocode(place) {
-        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${config.ORS_API_KEY}&text=${encodeURIComponent(place)}`);
+        // Prioritize searching for airports to get IATA codes for flight searches.
+        // --- FIX: Added 'address' and 'street' to layers for more precise, routable coordinates. ---
+        const res = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${config.ORS_API_KEY}&text=${encodeURIComponent(place)}&layers=venue,address,street,locality,county,region,country`);
         const data = await res.json();
-        if (data.features && data.features.length > 0) return data.features[0].geometry.coordinates;
+        if (data.features && data.features.length > 0) {
+            const feature = data.features[0];
+            // Return both coordinates and the IATA code if available (for airports).
+            const iata = feature.properties.iata;
+            return { coords: feature.geometry.coordinates, iata: iata };
+        }
         throw new Error('Location not found: ' + place);
     }
 
@@ -203,13 +212,16 @@ document.addEventListener('DOMContentLoaded', function () {
         $('alternativeRoutesInfo').innerHTML = '';
         poiLayer.clearLayers();
         $('poiList').innerHTML = '';
+        chargingStationsLayer.clearLayers();
+        $('chargingList').innerHTML = '';
         $('elevationProfile').innerHTML = '';
         $('elevationStats').innerHTML = '';
         $('elevationImpact').innerHTML = '';
         $('applyElevationBtn').style.display = 'none';
 
         try {
-            const coords = await Promise.all(validPlaces.map(geocode));
+            const geocodedResults = await Promise.all(validPlaces.map(geocode));
+            const coords = geocodedResults.map(r => r.coords);
             
             const profile = $('profile').value;
             const preference = $('preference').value;
@@ -1105,6 +1117,139 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // --- Charging Stations ---
+    $('searchChargingBtn').addEventListener('click', findChargingStations);
+
+    async function findChargingStations() {
+        const listContainer = $('chargingList');
+        listContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div> Searching...</div>';
+        
+        chargingStationsLayer.clearLayers();
+
+        const locationInputs = locationsContainer.querySelectorAll('.location-input');
+        const destinationInput = locationInputs[locationInputs.length - 1];
+        const destinationPlace = destinationInput.value.trim();
+
+        if (!destinationPlace) {
+            listContainer.textContent = 'Please enter a destination.';
+            return;
+        }
+
+        let destCoords;
+        try {
+            destCoords = await geocode(destinationPlace);
+        } catch (err) {
+            listContainer.textContent = 'Could not find the destination.';
+            return;
+        }
+
+        const [lon, lat] = destCoords;
+        const radius = parseFloat($('chargingRadius').value) || 5;
+        const maxResults = parseInt($('chargingCount').value) || 10;
+        
+        // **FIX:** Switched to a more reliable proxy (allorigins.win) and corrected the URL structure.
+        const targetUrl = `https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lon}&distance=${radius}&distanceunit=KM&maxresults=${maxResults}&key=${config.OCM_API_KEY}`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
+        try {
+            const res = await fetch(proxyUrl);
+            
+            if (!res.ok) {
+                throw new Error(`API request failed with status ${res.status}: ${res.statusText}`);
+            }
+            
+            // The allorigins proxy returns the raw JSON response directly.
+            const data = await res.json();
+
+            if (!data || data.length === 0) {
+                listContainer.innerHTML = '<div class="text-center text-muted mt-3">No charging stations found within the specified radius.</div>';
+                return;
+            }
+
+            let html = '';
+            const stationMarkers = {};
+
+            data.forEach(station => {
+                const stationId = station.ID;
+                const { Title: name, AddressInfo: address } = station;
+                const lat = address.Latitude;
+                const lon = address.Longitude;
+                const distance = address.Distance;
+
+                const addressLine = [address.AddressLine1, address.Town, address.StateOrProvince, address.Postcode].filter(Boolean).join(', ');
+                
+                let connectionsHtml = '<div class="connections-grid">';
+                if (station.Connections && station.Connections.length > 0) {
+                    const limitedConnections = station.Connections.slice(0, 4); // Show max 4 for brevity
+                    limitedConnections.forEach(conn => {
+                        const type = conn.ConnectionType?.Title || 'Unknown';
+                        const power = conn.PowerKW ? `${conn.PowerKW} kW` : '';
+                        const status = conn.StatusType?.Title || 'Available';
+                        connectionsHtml += `<div class="connection-item" title="${type}"><i class="bi bi-plug"></i> ${power} (${status})</div>`;
+                    });
+                    if (station.Connections.length > 4) {
+                        connectionsHtml += `<div class="connection-item">...and more</div>`;
+                    }
+                } else {
+                    connectionsHtml += '<div>No connection details</div>';
+                }
+                connectionsHtml += '</div>';
+
+
+                html += `
+                    <div class="list-group-item list-group-item-action poi-list-item" data-station-id="${stationId}">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">${name}</h6>
+                            <small>${distance.toFixed(1)} km away</small>
+                        </div>
+                        <p class="mb-1 small text-muted">${addressLine}</p>
+                        ${connectionsHtml}
+                    </div>`;
+                
+                const marker = L.marker([lat, lon], {
+                    icon: L.divIcon({
+                        className: 'charging-station-icon',
+                        html: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#198754" class="bi bi-ev-station-fill" viewBox="0 0 16 16"><path d="M1 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8a2 2 0 0 1 2 2v.5a.5.5 0 0 0 .5.5h.5a.5.5 0 0 1 .5.5v.5a.5.5 0 0 1-.5.5h-.5a.5.5 0 0 0-.5.5v.5a.5.5 0 0 1-1 0V12a1 1 0 0 0-1-1v4h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1V2Zm2 2.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-4Zm.293 3.56-1.11 2.14A.5.5 0 0 0 2.62 9h1.042a.25.25 0 0 1 .236.364l-.867 1.968a.25.25 0 0 0 .433.23l2.094-3.323a.25.25 0 0 0-.184-.403H3.38a.25.25 0 0 1-.236-.364l.867-1.968A.25.25 0 0 0 3.567 5H2.522a.5.5 0 0 0-.433.732Z"/></svg>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 32]
+                    })
+                }).bindPopup(`<b>${name}</b><br>${addressLine}`);
+
+                marker.on('click', () => {
+                    document.querySelectorAll('.poi-list-item').forEach(el => el.classList.remove('active'));
+                    const listItem = document.querySelector(`.poi-list-item[data-station-id="${stationId}"]`);
+                    if(listItem) {
+                        listItem.classList.add('active');
+                        listItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+
+                chargingStationsLayer.addLayer(marker);
+                stationMarkers[stationId] = marker;
+            });
+            
+            listContainer.innerHTML = `<div class="list-group list-group-flush">${html}</div>`;
+
+            document.querySelectorAll('.poi-list-item[data-station-id]').forEach(item => {
+                const stationId = item.dataset.stationId;
+                const marker = stationMarkers[stationId];
+                if (!marker) return;
+
+                item.addEventListener('click', () => {
+                    map.setView(marker.getLatLng(), 15);
+                    marker.openPopup();
+                    document.querySelectorAll('.poi-list-item').forEach(el => el.classList.remove('active'));
+                    item.classList.add('active');
+                });
+            });
+
+        } catch (err) {
+            // Log the specific error to the console for easier debugging
+            console.error('Failed to fetch charging stations:', err);
+            listContainer.innerHTML = '<div class="alert alert-danger">Could not retrieve charging station data. The proxy or API might be down.</div>';
+        }
+    }
+
 
     // --- Autocomplete ---
     function setupAutocomplete(input) {
@@ -1210,8 +1355,127 @@ document.addEventListener('DOMContentLoaded', function () {
             forecastEl.scrollBy({ left: scrollAmount, behavior: 'smooth' });
         });
     }
+
+    function initializeDates() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+        const dd = String(today.getDate()).padStart(2, '0');
+        const todayString = `${yyyy}-${mm}-${dd}`;
+    
+        if (fromDate) fromDate.value = todayString;
+        if (toDate) toDate.value = todayString;
+
+        // Add validation to ensure "To date" is not before "From date"
+        if (fromDate && toDate) {
+            fromDate.addEventListener('change', () => {
+                if (toDate.value < fromDate.value) {
+                    toDate.value = fromDate.value;
+                }
+                toDate.min = fromDate.value;
+            });
+        }
+    }
+
+    function handleBookingRedirect() {
+        const locationInputs = locationsContainer.querySelectorAll('.location-input');
+        const destinationInput = locationInputs[locationInputs.length - 1];
+        const destination = destinationInput ? destinationInput.value.trim() : '';
+
+        if (!destination) {
+            alert('Please enter a destination before booking.');
+            return;
+        }
+
+        const checkinDate = new Date(fromDate.value);
+        const checkoutDate = new Date(toDate.value);
+
+        if (isNaN(checkinDate.getTime()) || isNaN(checkoutDate.getTime())) {
+            alert('Please select valid From and To dates.');
+            return;
+        }
+
+        const numPassengers = parseNumber(passengers) || 1;
+
+        const params = new URLSearchParams({
+            ss: destination,
+            checkin_year: checkinDate.getFullYear(),
+            checkin_month: checkinDate.getMonth() + 1,
+            checkin_monthday: checkinDate.getDate(),
+            checkout_year: checkoutDate.getFullYear(),
+            checkout_month: checkoutDate.getMonth() + 1,
+            checkout_monthday: checkoutDate.getDate(),
+            group_adults: numPassengers, // Use passenger count
+            no_rooms: 1
+        });
+
+        const url = `https://www.booking.com/searchresults.html?${params.toString()}`;
+        window.open(url, '_blank');
+    }
+
+    function handleFlightsRedirect() {
+        const locationInputs = locationsContainer.querySelectorAll('.location-input');
+        const originInput = locationInputs[0];
+        const destinationInput = locationInputs[locationInputs.length - 1];
+
+        const originPlace = originInput?.value.trim();
+        const destinationPlace = destinationInput?.value.trim();
+
+        if (!originPlace || !destinationPlace || locationInputs.length < 2) {
+            alert('Please enter both a departure and destination for flight search.');
+            return;
+        }
+
+        if (isNaN(new Date(fromDate.value).getTime()) || isNaN(new Date(toDate.value).getTime())) {
+            alert('Please select valid From and To dates.');
+            return;
+        }
+
+        // --- FIX: Reverted to a more stable query-based URL format ---
+        // This avoids complex, undocumented parameters and relies on Google's natural language processing.
+        const originCity = getCityFromAddress(originPlace);
+        const destinationCity = getCityFromAddress(destinationPlace);
+
+        const fromDateStr = fromDate.value;
+        const toDateStr = toDate.value;
+
+        const numPassengers = parseNumber(passengers) || 1;
+
+        // Construct a natural language query.
+        const query = `Flights from ${originCity} to ${destinationCity} on ${fromDateStr} through ${toDateStr} ${numPassengers} passengers`;
+
+        // The passenger count is now part of the main query.
+        const params = new URLSearchParams({
+            q: query
+        });
+
+        const url = `https://www.google.com/travel/flights?${params.toString()}`;
+        window.open(url, '_blank');
+    }
+
+    /**
+     * Extracts the city name from a full address string.
+     */
+    function getCityFromAddress(address) {
+        if (!address) return '';
+        const parts = address.split(',');
+        // If address is like "Street, City, State...", return "City".
+        if (parts.length >= 3) {
+            return parts[1].trim();
+        }
+        // If address is just "City, Country", return "City".
+        if (parts.length === 2) {
+            return parts[0].trim();
+        }
+        // Otherwise, return the whole string (e.g., if user just typed "London").
+        return address.trim();
+    }
+
     // --- Initializer ---
     applyProfile('shortRange'); // Apply default profile on load
     initializeLocations();
+    initializeDates();
     setupHourlyForecastSlider();
+    bookingBtn.addEventListener('click', handleBookingRedirect);
+    flightsBtn.addEventListener('click', handleFlightsRedirect);
 });
