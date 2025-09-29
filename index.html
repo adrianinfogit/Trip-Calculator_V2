@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Advanced Trip Calculator</title>
+    <!-- Add favicon -->
+    <link rel="icon" type="image/png" href="favicon.png" />
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons CSS -->
@@ -91,13 +93,9 @@
 
                         <hr class="mt-4">
 
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="card-title mb-0">Vehicle & Cost</h5>
-                            <button class="btn btn-sm btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#vehicleDetailsCollapse" aria-expanded="false" aria-controls="vehicleDetailsCollapse">
-                                <i class="bi bi-sliders"></i> Adjust
-                            </button>
-                        </div>
-                        <div id="profileSelector" class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Vehicle Profiles">
+                        <h5 class="card-title mb-3">Vehicle & Cost</h5>
+
+                        <div id="profileSelector" class="btn-group btn-group-sm w-100" role="group" aria-label="Vehicle Profiles">
                             <input type="radio" class="btn-check" name="vehicleProfile" id="profile1" value="shortRange" autocomplete="off" checked>
                             <label class="btn btn-outline-primary" for="profile1">Short</label>
 
@@ -108,7 +106,7 @@
                             <label class="btn btn-outline-primary" for="profile3">Uphill</label>
                         </div>
 
-                        <div class="d-grid gap-3">
+                        <div class="d-grid gap-2 mt-3">
                             <div class="row g-2">
                                 <div class="col-6">
                                     <label for="tripDistance" class="form-label">Trip Distance</label>
@@ -125,14 +123,20 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="collapse" id="vehicleDetailsCollapse">
-                                <div class="d-grid gap-3 mt-3">
-                                    <hr class="my-1">
-                                    <h6 class="text-muted mb-0">Vehicle Efficiency</h6>
-                                    <div class="row g-2"><div class="col-6"><label for="fuelConsumption" class="form-label">Fuel</label><div class="input-group"><input id="fuelConsumption" type="number" class="form-control" value="8" min="0" step="0.1"><span class="input-group-text">L/100</span></div></div><div class="col-6"><label for="electricConsumption" class="form-label">Electric</label><div class="input-group"><input id="electricConsumption" type="number" class="form-control" value="4.2" min="0.1" step="0.1"><span class="input-group-text">km/kWh</span></div></div></div>
-                                    <hr class="my-1">
-                                    <h6 class="text-muted mb-0">Energy Prices</h6>
-                                    <div class="row g-2"><div class="col-6"><label for="gasPrice" class="form-label">Gasoline</label><div class="input-group"><span class="input-group-text">€</span><input id="gasPrice" type="number" class="form-control" value="1.8" min="0" step="0.01"><span class="input-group-text">/L</span></div></div><div class="col-6"><label for="elecPrice" class="form-label">Electricity</label><div class="input-group"><span class="input-group-text">€</span><input id="elecPrice" type="number" class="form-control" value="0.45" min="0" step="0.01"><span class="input-group-text">/kWh</span></div></div></div>
+                            <div class="row g-2">
+                                <div class="col-6 d-grid gap-2">
+                                    <div>
+                                        <label for="fuelConsumption" class="form-label">Fuel Eff. (L/100)</label>
+                                        <input id="fuelConsumption" type="number" class="form-control" value="8" min="0" step="0.1">
+                                    </div>
+                                    <div><label for="gasPrice" class="form-label">Fuel Price (€/L)</label><input id="gasPrice" type="number" class="form-control" value="1.8" min="0" step="0.01"></div>
+                                </div>
+                                <div class="col-6 d-grid gap-2">
+                                    <div>
+                                        <label for="electricConsumption" class="form-label">Elec. Eff. (km/kWh)</label>
+                                        <input id="electricConsumption" type="number" class="form-control" value="4.2" min="0.1" step="0.1">
+                                    </div>
+                                    <div><label for="elecPrice" class="form-label">Elec. Price (€/kWh)</label><input id="elecPrice" type="number" class="form-control" value="0.45" min="0" step="0.01"></div>
                                 </div>
                             </div>
                         </div>
@@ -287,12 +291,27 @@
             <div class="col-12 col-md-6 col-lg-12 order-4">
                 <div class="card shadow-sm">
                     <div class="card-body p-4">
-                        <h5 class="card-title mb-3">Destination Weather</h5>
+                        <div class="d-flex align-items-baseline mb-3">
+                            <h5 class="card-title mb-0">Destination Weather</h5>
+                            <p id="weatherSummary" class="text-muted small mb-0 ms-2" aria-live="polite">Calculate a route to see weather.</p>
+                        </div>
                         <section id="weather">
-                           <p id="weatherSummary" class="text-muted" aria-live="polite">Calculate a route to see weather.</p>
-                           <div id="weatherToday"></div>
-                           <div id="hourlyForecast" class="mt-3"></div>
-                           <div id="forecastDays" class="row g-2 mt-2"></div>
+                           <div class="row g-lg-4">
+                               <div class="col-lg-4">
+                                   <h6 class="d-none d-lg-block">Today</h6>
+                                   <div id="weatherToday"></div>
+                               </div>
+                               <div class="col-lg-8">
+                                   <h6 class="mt-3 mt-lg-0">Hourly Forecast</h6>
+                                   <div class="hourly-forecast-container mt-2">
+                                       <button class="scroll-btn left" aria-label="Scroll Left">&lt;</button>
+                                       <div id="hourlyForecast"></div>
+                                       <button class="scroll-btn right" aria-label="Scroll Right">&gt;</button>
+                                   </div>
+                                   <h6 class="mt-4">5-Day Forecast</h6>
+                                   <div id="forecastDays" class="row g-2 mt-2"></div>
+                               </div>
+                           </div>
                            <a id="weatherLink" href="#" target="_blank" rel="noopener noreferrer" class="text-decoration-none d-block mt-3"></a>
                         </section>
                     </div>
