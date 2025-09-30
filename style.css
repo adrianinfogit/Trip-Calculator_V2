@@ -355,3 +355,8 @@ body {
 .poi-links a:not(:last-child) {
     margin-right: 6px;
 }
+
+/* Styling for the new map click popup */
+.map-click-popup .leaflet-popup-content-wrapper {
+    border-radius: var(--border-radius-sm);
+}
