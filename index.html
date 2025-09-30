@@ -41,14 +41,16 @@
                             <button id="googleMapsBtn" class="btn btn-success flex-grow-1"><span class="btn-text">Maps</span><span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span></button>
                         </div>
 
-                        <!-- Collapsible section for dates and booking, hidden on mobile -->
-                        <div class="d-grid d-lg-none mt-3">
-                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#tripDatesCollapse" aria-expanded="false" aria-controls="tripDatesCollapse">
-                                <i class="bi bi-calendar3"></i> Show Dates & Booking
+                        <hr class="mt-4">
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="text-muted mb-0">Dates & Booking</h6>
+                            <button class="btn btn-sm btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#tripDatesCollapse" aria-expanded="false" aria-controls="tripDatesCollapse">
+                                <i class="bi bi-calendar3"></i> Adjust
                             </button>
                         </div>
-                        <div class="collapse d-lg-block" id="tripDatesCollapse">
-                            <div class="row g-2 mt-3">
+                        <div class="collapse" id="tripDatesCollapse">
+                            <div class="row g-2 mt-2">
                                 <div class="col-6">
                                     <label for="fromDate" class="form-label">From date</label>
                                     <input type="date" id="fromDate" class="form-control">
