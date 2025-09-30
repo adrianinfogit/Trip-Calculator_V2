@@ -36,31 +36,39 @@
                         
                         <div class="mt-3 d-flex flex-wrap justify-content-between align-items-stretch gap-2">
                             <button id="addStopBtn" class="btn btn-outline-secondary btn-sm">+ Add Stop</button>
-                            <button id="calcRoute" class="btn btn-primary" style="flex-basis: 75px; flex-grow: 0;">Calculate<br>Route</button>
-                            <div id="tripTime" class="trip-time-badge flex-grow-1 text-center">0h 00m</div>
+                            <button id="calcRoute" class="btn btn-primary">Calculate<br>Route</button>
+                            <div id="tripTime" class="trip-time-badge flex-grow-1 text-center d-flex align-items-center justify-content-center">0h 00m</div>
                             <button id="googleMapsBtn" class="btn btn-success">
                                 <span class="btn-text">Google Maps</span>
                                 <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                             </button>
                         </div>
 
-                        <div class="row g-2 mt-3">
-                            <div class="col-6">
-                                <label for="fromDate" class="form-label">From date</label>
-                                <input type="date" id="fromDate" class="form-control">
-                            </div>
-                            <div class="col-6">
-                                <label for="toDate" class="form-label">To date</label>
-                                <input type="date" id="toDate" class="form-control">
-                            </div>
+                        <!-- Collapsible section for dates and booking, hidden on mobile -->
+                        <div class="d-grid d-lg-none mt-3">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#tripDatesCollapse" aria-expanded="false" aria-controls="tripDatesCollapse">
+                                <i class="bi bi-calendar3"></i> Show Dates & Booking
+                            </button>
                         </div>
-
-                        <div class="row g-2 mt-3">
-                            <div class="col-6 d-grid">
-                                <button id="bookingBtn" class="btn btn-info"><i class="bi bi-calendar-check"></i> Booking</button>
+                        <div class="collapse d-lg-block" id="tripDatesCollapse">
+                            <div class="row g-2 mt-3">
+                                <div class="col-6">
+                                    <label for="fromDate" class="form-label">From date</label>
+                                    <input type="date" id="fromDate" class="form-control">
+                                </div>
+                                <div class="col-6">
+                                    <label for="toDate" class="form-label">To date</label>
+                                    <input type="date" id="toDate" class="form-control">
+                                </div>
                             </div>
-                            <div class="col-6 d-grid">
-                                <button id="flightsBtn" class="btn btn-warning"><i class="bi bi-airplane"></i> Flights</button>
+
+                            <div class="row g-2 mt-3">
+                                <div class="col-6 d-grid">
+                                    <button id="bookingBtn" class="btn btn-info"><i class="bi bi-calendar-check"></i> Booking</button>
+                                </div>
+                                <div class="col-6 d-grid">
+                                    <button id="flightsBtn" class="btn btn-warning"><i class="bi bi-airplane"></i> Flights</button>
+                                </div>
                             </div>
                         </div>
 
