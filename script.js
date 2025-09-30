@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const config = {
         // --- FIX: Restored the original, working API Key ---
         ORS_API_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRkZjFhMmRiZGI1NjQ1Yjg4NDUwNmQ4ZjkzMDYxNjFmIiwiaCI6Im11cm11cjY0In0=',
-        OCM_API_KEY: 'c8a5035b-433b-477b-8902-b2809e36e133', // OpenChargeMap API Key
         LONG_ROUTE_THRESHOLD_KM: 150
     };
 
@@ -15,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const [tripDistance, electricDistance, fuelConsumption, electricConsumption, gasPrice, elecPrice] = inputs;
     const totalCost = $('totalCost'), costElec = $('costElec'), costGas = $('costGas');
     const litersGas = $('litersGas'), kwhElec = $('kwhElec'), pctElec = $('pctElec'), pctGas = $('pctGas');
-    const fromDate = $('fromDate'), toDate = $('toDate'), passengers = $('passengers');
+    const fromDate = $('fromDate'), toDate = $('toDate');
     const costPerKm = $('costPerKm'), savings = $('savings'), summaryText = $('summaryText'), roundTripCost = $('roundTripCost'), splitFill = $('splitFill'), warn = $('warn'), bookingBtn = $('bookingBtn'), flightsBtn = $('flightsBtn');
     const locationsContainer = $('locationsContainer'), showPOIBtn = $('showPOIBtn');
 
@@ -93,8 +92,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Sync electric range with trip distance for the "Short Range" profile
     tripDistance.addEventListener('input', () => {
         const activeProfile = document.querySelector('input[name="vehicleProfile"]:checked').value;
+        const d = parseNumber(tripDistance);
         if (activeProfile === 'shortRange') {
-            electricDistance.value = tripDistance.value;
+            electricDistance.value = Math.min(d, 40);
         }
     });
 
@@ -133,14 +133,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         if (profileName === 'shortRange') {
-            electricDistance.value = tripDistance.value;
+            const d = parseNumber(tripDistance);
+            electricDistance.value = Math.min(d, 40);
         }
 
         // Ensure autopopulated electric range does not exceed trip distance.
         const d = parseNumber(tripDistance);
         const dElec = parseNumber(electricDistance);
         if (d > 0 && dElec > d) {
-            electricDistance.value = tripDistance.value;
+            electricDistance.value = d;
         }
 
         calculate();
@@ -173,7 +174,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
-    let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map), chargingStationsLayer = L.layerGroup().addTo(map);
+    let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map);
 
     async function geocode(place) {
         // Prioritize searching for airports to get IATA codes for flight searches.
@@ -210,10 +211,8 @@ document.addEventListener('DOMContentLoaded', function () {
         markers.forEach(m => map.removeLayer(m));
         markers = [];
         $('alternativeRoutesInfo').innerHTML = '';
-        poiLayer.clearLayers();
         $('poiList').innerHTML = '';
-        chargingStationsLayer.clearLayers();
-        $('chargingList').innerHTML = '';
+        poiLayer.clearLayers();
         $('elevationProfile').innerHTML = '';
         $('elevationStats').innerHTML = '';
         $('elevationImpact').innerHTML = '';
@@ -1117,139 +1116,37 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // --- Charging Stations ---
-    $('searchChargingBtn').addEventListener('click', findChargingStations);
-
-    async function findChargingStations() {
-        const listContainer = $('chargingList');
-        listContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div> Searching...</div>';
-        
-        chargingStationsLayer.clearLayers();
-
+    $('searchChargingBtn').addEventListener('click', () => {
         const locationInputs = locationsContainer.querySelectorAll('.location-input');
         const destinationInput = locationInputs[locationInputs.length - 1];
-        const destinationPlace = destinationInput.value.trim();
+        const destination = destinationInput ? destinationInput.value.trim() : '';
 
-        if (!destinationPlace) {
-            listContainer.textContent = 'Please enter a destination.';
+        if (!destination) {
+            alert('Please enter a destination to find charging stations.');
             return;
         }
 
-        let destCoords;
-        try {
-            destCoords = await geocode(destinationPlace);
-        } catch (err) {
-            listContainer.textContent = 'Could not find the destination.';
+        const query = `PHEV charging stations near ${destination}`;
+        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+
+        window.open(url, '_blank');
+    });
+
+    $('searchParkingBtn').addEventListener('click', () => {
+        const locationInputs = locationsContainer.querySelectorAll('.location-input');
+        const destinationInput = locationInputs[locationInputs.length - 1];
+        const destination = destinationInput ? destinationInput.value.trim() : '';
+
+        if (!destination) {
+            alert('Please enter a destination to find parking.');
             return;
         }
 
-        const [lon, lat] = destCoords;
-        const radius = parseFloat($('chargingRadius').value) || 5;
-        const maxResults = parseInt($('chargingCount').value) || 10;
-        
-        // **FIX:** Switched to a more reliable proxy (allorigins.win) and corrected the URL structure.
-        const targetUrl = `https://api.openchargemap.io/v3/poi/?output=json&latitude=${lat}&longitude=${lon}&distance=${radius}&distanceunit=KM&maxresults=${maxResults}&key=${config.OCM_API_KEY}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        const query = `parking near ${destination}`;
+        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 
-        try {
-            const res = await fetch(proxyUrl);
-            
-            if (!res.ok) {
-                throw new Error(`API request failed with status ${res.status}: ${res.statusText}`);
-            }
-            
-            // The allorigins proxy returns the raw JSON response directly.
-            const data = await res.json();
-
-            if (!data || data.length === 0) {
-                listContainer.innerHTML = '<div class="text-center text-muted mt-3">No charging stations found within the specified radius.</div>';
-                return;
-            }
-
-            let html = '';
-            const stationMarkers = {};
-
-            data.forEach(station => {
-                const stationId = station.ID;
-                const { Title: name, AddressInfo: address } = station;
-                const lat = address.Latitude;
-                const lon = address.Longitude;
-                const distance = address.Distance;
-
-                const addressLine = [address.AddressLine1, address.Town, address.StateOrProvince, address.Postcode].filter(Boolean).join(', ');
-                
-                let connectionsHtml = '<div class="connections-grid">';
-                if (station.Connections && station.Connections.length > 0) {
-                    const limitedConnections = station.Connections.slice(0, 4); // Show max 4 for brevity
-                    limitedConnections.forEach(conn => {
-                        const type = conn.ConnectionType?.Title || 'Unknown';
-                        const power = conn.PowerKW ? `${conn.PowerKW} kW` : '';
-                        const status = conn.StatusType?.Title || 'Available';
-                        connectionsHtml += `<div class="connection-item" title="${type}"><i class="bi bi-plug"></i> ${power} (${status})</div>`;
-                    });
-                    if (station.Connections.length > 4) {
-                        connectionsHtml += `<div class="connection-item">...and more</div>`;
-                    }
-                } else {
-                    connectionsHtml += '<div>No connection details</div>';
-                }
-                connectionsHtml += '</div>';
-
-
-                html += `
-                    <div class="list-group-item list-group-item-action poi-list-item" data-station-id="${stationId}">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">${name}</h6>
-                            <small>${distance.toFixed(1)} km away</small>
-                        </div>
-                        <p class="mb-1 small text-muted">${addressLine}</p>
-                        ${connectionsHtml}
-                    </div>`;
-                
-                const marker = L.marker([lat, lon], {
-                    icon: L.divIcon({
-                        className: 'charging-station-icon',
-                        html: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="#198754" class="bi bi-ev-station-fill" viewBox="0 0 16 16"><path d="M1 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8a2 2 0 0 1 2 2v.5a.5.5 0 0 0 .5.5h.5a.5.5 0 0 1 .5.5v.5a.5.5 0 0 1-.5.5h-.5a.5.5 0 0 0-.5.5v.5a.5.5 0 0 1-1 0V12a1 1 0 0 0-1-1v4h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1V2Zm2 2.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-4Zm.293 3.56-1.11 2.14A.5.5 0 0 0 2.62 9h1.042a.25.25 0 0 1 .236.364l-.867 1.968a.25.25 0 0 0 .433.23l2.094-3.323a.25.25 0 0 0-.184-.403H3.38a.25.25 0 0 1-.236-.364l.867-1.968A.25.25 0 0 0 3.567 5H2.522a.5.5 0 0 0-.433.732Z"/></svg>`,
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 32]
-                    })
-                }).bindPopup(`<b>${name}</b><br>${addressLine}`);
-
-                marker.on('click', () => {
-                    document.querySelectorAll('.poi-list-item').forEach(el => el.classList.remove('active'));
-                    const listItem = document.querySelector(`.poi-list-item[data-station-id="${stationId}"]`);
-                    if(listItem) {
-                        listItem.classList.add('active');
-                        listItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                });
-
-                chargingStationsLayer.addLayer(marker);
-                stationMarkers[stationId] = marker;
-            });
-            
-            listContainer.innerHTML = `<div class="list-group list-group-flush">${html}</div>`;
-
-            document.querySelectorAll('.poi-list-item[data-station-id]').forEach(item => {
-                const stationId = item.dataset.stationId;
-                const marker = stationMarkers[stationId];
-                if (!marker) return;
-
-                item.addEventListener('click', () => {
-                    map.setView(marker.getLatLng(), 15);
-                    marker.openPopup();
-                    document.querySelectorAll('.poi-list-item').forEach(el => el.classList.remove('active'));
-                    item.classList.add('active');
-                });
-            });
-
-        } catch (err) {
-            // Log the specific error to the console for easier debugging
-            console.error('Failed to fetch charging stations:', err);
-            listContainer.innerHTML = '<div class="alert alert-danger">Could not retrieve charging station data. The proxy or API might be down.</div>';
-        }
-    }
-
+        window.open(url, '_blank');
+    });
 
     // --- Autocomplete ---
     function setupAutocomplete(input) {
@@ -1395,8 +1292,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const numPassengers = parseNumber(passengers) || 1;
-
         const params = new URLSearchParams({
             ss: destination,
             checkin_year: checkinDate.getFullYear(),
@@ -1405,8 +1300,10 @@ document.addEventListener('DOMContentLoaded', function () {
             checkout_year: checkoutDate.getFullYear(),
             checkout_month: checkoutDate.getMonth() + 1,
             checkout_monthday: checkoutDate.getDate(),
-            group_adults: numPassengers, // Use passenger count
-            no_rooms: 1
+            group_adults: 2,
+            no_rooms: 1,
+            group_children: 1,
+            age: 14
         });
 
         const url = `https://www.booking.com/searchresults.html?${params.toString()}`;
@@ -1439,10 +1336,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const fromDateStr = fromDate.value;
         const toDateStr = toDate.value;
 
-        const numPassengers = parseNumber(passengers) || 1;
-
         // Construct a natural language query.
-        const query = `Flights from ${originCity} to ${destinationCity} on ${fromDateStr} through ${toDateStr} ${numPassengers} passengers`;
+        const query = `Flights from ${originCity} to ${destinationCity} on ${fromDateStr} through ${toDateStr} 3 passengers`;
 
         // The passenger count is now part of the main query.
         const params = new URLSearchParams({
