@@ -355,26 +355,3 @@ body {
 .poi-links a:not(:last-child) {
     margin-right: 6px;
 }
-
-.charging-station-icon {
-    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
-}
-
-.connections-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 0.25rem;
-    font-size: 0.8em;
-    margin-top: 0.5rem;
-    color: var(--text-muted);
-}
-
-.connection-item {
-    background-color: var(--background-color);
-    padding: 2px 6px;
-    border-radius: var(--border-radius-sm);
-    border: 1px solid var(--border-color);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
