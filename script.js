@@ -766,180 +766,189 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderElevationChart(elevations, totalDistanceKm) {
         const container = $('elevationProfile');
-        container.innerHTML = '';
-        if (!container.clientWidth) {
-            setTimeout(() => renderElevationChart(elevations, totalDistanceKm), 100);
-            return;
-        }
 
-        // --- 1. Calculate Statistics ---
-        let totalAscent = 0, totalDescent = 0, maxGrade = 0;
-        const segmentDistanceKm = totalDistanceKm / (elevations.length - 1);
-
-        for (let i = 1; i < elevations.length; i++) {
-            const elevChange = elevations[i] - elevations[i-1];
-            if (elevChange > 0) {
-                totalAscent += elevChange;
-            } else {
-                totalDescent -= elevChange;
+        const drawChart = () => {
+            // If the container isn't visible or has no width, wait for the next animation frame.
+            // This is crucial for mobile where the layout might not be ready immediately.
+            if (!container.clientWidth || !container.offsetParent) {
+                requestAnimationFrame(drawChart);
+                return;
             }
-            if (segmentDistanceKm > 0) {
-                const grade = (elevChange / (segmentDistanceKm * 1000)) * 100;
-                if (grade > maxGrade) {
-                    maxGrade = grade;
+            
+            container.innerHTML = '';
+
+            // --- 1. Calculate Statistics ---
+            let totalAscent = 0, totalDescent = 0, maxGrade = 0;
+            const segmentDistanceKm = totalDistanceKm / (elevations.length - 1);
+
+            for (let i = 1; i < elevations.length; i++) {
+                const elevChange = elevations[i] - elevations[i-1];
+                if (elevChange > 0) {
+                    totalAscent += elevChange;
+                } else {
+                    totalDescent -= elevChange;
+                }
+                if (segmentDistanceKm > 0) {
+                    const grade = (elevChange / (segmentDistanceKm * 1000)) * 100;
+                    if (grade > maxGrade) {
+                        maxGrade = grade;
+                    }
                 }
             }
-        }
 
-        // Auto-select profile based on route characteristics
-        autoSelectProfile(totalDistanceKm, maxGrade);
+            // Auto-select profile based on route characteristics
+            autoSelectProfile(totalDistanceKm, maxGrade);
 
-        // --- 2. Render Statistics & Impact Suggestion ---
-        $('elevationStats').innerHTML = `
-            <div class="elevation-stat-item">
-                <div class="label"><i class="bi bi-arrow-up"></i> Ascent</div>
-                <div class="value">${Math.round(totalAscent)} m</div>
-            </div>
-            <div class="elevation-stat-item">
-                <div class="label"><i class="bi bi-arrow-down"></i> Descent</div>
-                <div class="value">${Math.round(totalDescent)} m</div>
-            </div>
-             <div class="elevation-stat-item">
-                <div class="label"><i class="bi bi-reception-4"></i> Max Grade</div>
-                <div class="value">${maxGrade.toFixed(1)}%</div>
-            </div>
-        `;
-        
-        const impact = calculateElevationImpact(totalAscent, totalDescent, totalDistanceKm);
-        const applyBtn = $('applyElevationBtn');
-
-        if (impact.change !== 'none') {
-            applyBtn.style.display = 'block';
-            applyBtn.disabled = false;
-            applyBtn.innerHTML = 'Apply<br>Adjustments';
-
-            // Use .onclick to easily overwrite the listener for each new route
-            applyBtn.onclick = () => {
-                const currentFuel = parseNumber(fuelConsumption);
-                const currentElec = parseNumber(electricConsumption);
-
-                fuelConsumption.value = (currentFuel * impact.gasFactor).toFixed(1);
-                electricConsumption.value = (currentElec / impact.elecFactor).toFixed(1); // Divide because unit is km/kWh
-                
-                applyBtn.disabled = true;
-                applyBtn.innerHTML = 'Applied!';
-            };
-        }
-        
-        const alertType = impact.change === 'increase' ? 'info' : (impact.change === 'decrease' ? 'success' : 'secondary');
-        const iconType = impact.change === 'increase' ? 'info-circle-fill' : (impact.change === 'decrease' ? 'check-circle-fill' : 'lightbulb');
-        
-        let suggestionHtml = '';
-        if (impact.change !== 'none') {
-            suggestionHtml = `
-                <div class="mt-1">Suggested consumption adjustment for a more accurate cost:</div>
-                <ul class="mb-0 mt-1">
-                    <li><b>Gasoline:</b> ~${impact.gas} ${impact.change}</li>
-                    <li><b>Electric:</b> ~${impact.elec} ${impact.change}</li>
-                </ul>
-            `;
-        }
-
-        $('elevationImpact').innerHTML = `
-            <div class="alert alert-${alertType} elevation-impact-suggestion">
-                <i class="bi bi-${iconType}"></i>
-                <div>
-                    <strong>Elevation Impact: ${impact.level}.</strong> ${impact.reason}
-                    ${suggestionHtml}
+            // --- 2. Render Statistics & Impact Suggestion ---
+            $('elevationStats').innerHTML = `
+                <div class="elevation-stat-item">
+                    <div class="label"><i class="bi bi-arrow-up"></i> Ascent</div>
+                    <div class="value">${Math.round(totalAscent)} m</div>
                 </div>
-            </div>
-        `;
-        
-        // --- 3. Render Chart SVG ---
-        const w = container.clientWidth, h = 120, n = elevations.length;
-        const margin = 32, chartW = w - margin - 8, chartH = h - margin;
-        const max = Math.max(...elevations), min = Math.min(...elevations);
-        const yRange = max - min;
-        
-        let pathSegments = '', pointsForArea = '', hoverCircles = '', gridLines = '';
+                <div class="elevation-stat-item">
+                    <div class="label"><i class="bi bi-arrow-down"></i> Descent</div>
+                    <div class="value">${Math.round(totalDescent)} m</div>
+                </div>
+                 <div class="elevation-stat-item">
+                    <div class="label"><i class="bi bi-reception-4"></i> Max Grade</div>
+                    <div class="value">${maxGrade.toFixed(1)}%</div>
+                </div>
+            `;
+            
+            const impact = calculateElevationImpact(totalAscent, totalDescent, totalDistanceKm);
+            const applyBtn = $('applyElevationBtn');
 
-        for (let i = 0; i <= 4; i++) {
-            const y = chartH - (i/4) * (chartH - 8);
-            gridLines += `<line class="elevation-grid-line" x1="${margin}" y1="${y}" x2="${margin+chartW}" y2="${y}"></line>`;
-        }
+            if (impact.change !== 'none') {
+                applyBtn.style.display = 'block';
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = 'Apply<br>Adjustments';
 
-        for (let i = 1; i < n; i++) {
-            const x1 = margin + ((i - 1) / (n - 1)) * chartW;
-            const y1 = chartH - ((elevations[i - 1] - min) / (yRange + 1e-6)) * (chartH - 8);
-            const x2 = margin + (i / (n - 1)) * chartW;
-            const y2 = chartH - ((elevations[i] - min) / (yRange + 1e-6)) * (chartH - 8);
+                // Use .onclick to easily overwrite the listener for each new route
+                applyBtn.onclick = () => {
+                    const currentFuel = parseNumber(fuelConsumption);
+                    const currentElec = parseNumber(electricConsumption);
 
-            if (i === 1) pointsForArea += `${x1},${y1} `;
-            pointsForArea += `${x2},${y2} `;
-
-            const elevChange = elevations[i] - elevations[i-1];
-            const grade = segmentDistanceKm > 0 ? (elevChange / (segmentDistanceKm * 1000)) * 100 : 0;
-            const color = getGradeColor(grade);
-
-            pathSegments += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
-            hoverCircles += `<circle class="elev-hover" data-idx="${i-1}" cx="${x1}" cy="${y1}" r="8" fill="transparent" />`;
-        }
-        if (n > 0) hoverCircles += `<circle class="elev-hover" data-idx="${n-1}" cx="${margin + chartW}" cy="${chartH - ((elevations[n-1] - min) / (yRange + 1e-6)) * (chartH - 8)}" r="8" fill="transparent" />`;
-
-        const svgContent = `
-            <svg width="${w}" height="${h}" style="touch-action:none;user-select:none;">
-                <defs>
-                    <linearGradient id="elevGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style="stop-color:#0d6efd;stop-opacity:0.4"/>
-                        <stop offset="100%" style="stop-color:#0d6efd;stop-opacity:0.05"/>
-                    </linearGradient>
-                </defs>
-                ${gridLines}
-                <path d="M${margin},${chartH} L${pointsForArea} L${margin + chartW},${chartH} Z" fill="url(#elevGradient)"/>
-                ${pathSegments}
-                ${hoverCircles}
-                <g id="elevation-tooltip" style="visibility: hidden;">
-                    <line class="elevation-tooltip-line" y1="8" y2="${chartH}"></line>
-                    <rect class="elevation-tooltip-rect" width="90" height="20" y="8"></rect>
-                    <text class="elevation-tooltip-text" y="22">0m / 0km</text>
-                </g>
-                <text x="2" y="${chartH}" font-size="11" fill="#6c757d">${Math.round(min)} m</text>
-                <text x="2" y="16" font-size="11" fill="#6c757d">${Math.round(max)} m</text>
-                <text x="${margin}" y="${h - 4}" font-size="11" text-anchor="middle">0 km</text>
-                <text x="${margin + chartW}" y="${h - 4}" font-size="11" text-anchor="middle">${Math.round(totalDistanceKm)} km</text>
-            </svg>`;
-        
-        container.innerHTML = `<div style="margin-bottom: 4px;">Elevation Profile</div>${svgContent}`;
-
-        // --- 4. Setup Tooltip Interactivity ---
-        const tooltip = container.querySelector('#elevation-tooltip');
-        const tooltipLine = tooltip.querySelector('.elevation-tooltip-line');
-        const tooltipRect = tooltip.querySelector('.elevation-tooltip-rect');
-        const tooltipText = tooltip.querySelector('.elevation-tooltip-text');
-
-        setTimeout(() => {
-            container.querySelectorAll('.elev-hover').forEach(circle => {
-                circle.addEventListener('mouseenter', (e) => {
-                    const idx = parseInt(e.target.dataset.idx);
-                    const x = parseFloat(e.target.getAttribute('cx'));
-                    const elevation = Math.round(elevations[idx]);
-                    const distance = (idx / (n - 1)) * totalDistanceKm;
+                    fuelConsumption.value = (currentFuel * impact.gasFactor).toFixed(1);
+                    electricConsumption.value = (currentElec / impact.elecFactor).toFixed(1); // Divide because unit is km/kWh
                     
-                    showElevationHoverMarker(idx);
+                    applyBtn.disabled = true;
+                    applyBtn.innerHTML = 'Applied!';
+                };
+            }
+            
+            const alertType = impact.change === 'increase' ? 'info' : (impact.change === 'decrease' ? 'success' : 'secondary');
+            const iconType = impact.change === 'increase' ? 'info-circle-fill' : (impact.change === 'decrease' ? 'check-circle-fill' : 'lightbulb');
+            
+            let suggestionHtml = '';
+            if (impact.change !== 'none') {
+                suggestionHtml = `
+                    <div class="mt-1">Suggested consumption adjustment for a more accurate cost:</div>
+                    <ul class="mb-0 mt-1">
+                        <li><b>Gasoline:</b> ~${impact.gas} ${impact.change}</li>
+                        <li><b>Electric:</b> ~${impact.elec} ${impact.change}</li>
+                    </ul>
+                `;
+            }
 
-                    tooltipLine.setAttribute('x1', x);
-                    tooltipLine.setAttribute('x2', x);
-                    tooltipText.setAttribute('x', x);
-                    tooltipRect.setAttribute('x', x - 45);
-                    tooltipText.textContent = `${elevation} m / ${distance.toFixed(1)} km`;
-                    tooltip.style.visibility = 'visible';
+            $('elevationImpact').innerHTML = `
+                <div class="alert alert-${alertType} elevation-impact-suggestion">
+                    <i class="bi bi-${iconType}"></i>
+                    <div>
+                        <strong>Elevation Impact: ${impact.level}.</strong> ${impact.reason}
+                        ${suggestionHtml}
+                    </div>
+                </div>
+            `;
+            
+            // --- 3. Render Chart SVG ---
+            const w = container.clientWidth, h = 120, n = elevations.length;
+            const margin = 32, chartW = w - margin - 8, chartH = h - margin;
+            const max = Math.max(...elevations), min = Math.min(...elevations);
+            const yRange = max - min;
+            
+            let pathSegments = '', pointsForArea = '', hoverCircles = '', gridLines = '';
+
+            for (let i = 0; i <= 4; i++) {
+                const y = chartH - (i/4) * (chartH - 8);
+                gridLines += `<line class="elevation-grid-line" x1="${margin}" y1="${y}" x2="${margin+chartW}" y2="${y}"></line>`;
+            }
+
+            for (let i = 1; i < n; i++) {
+                const x1 = margin + ((i - 1) / (n - 1)) * chartW;
+                const y1 = chartH - ((elevations[i - 1] - min) / (yRange + 1e-6)) * (chartH - 8);
+                const x2 = margin + (i / (n - 1)) * chartW;
+                const y2 = chartH - ((elevations[i] - min) / (yRange + 1e-6)) * (chartH - 8);
+
+                if (i === 1) pointsForArea += `${x1},${y1} `;
+                pointsForArea += `${x2},${y2} `;
+
+                const elevChange = elevations[i] - elevations[i-1];
+                const grade = segmentDistanceKm > 0 ? (elevChange / (segmentDistanceKm * 1000)) * 100 : 0;
+                const color = getGradeColor(grade);
+
+                pathSegments += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
+                hoverCircles += `<circle class="elev-hover" data-idx="${i-1}" cx="${x1}" cy="${y1}" r="8" fill="transparent" />`;
+            }
+            if (n > 0) hoverCircles += `<circle class="elev-hover" data-idx="${n-1}" cx="${margin + chartW}" cy="${chartH - ((elevations[n-1] - min) / (yRange + 1e-6)) * (chartH - 8)}" r="8" fill="transparent" />`;
+
+            const svgContent = `
+                <svg width="${w}" height="${h}" style="touch-action:none;user-select:none;">
+                    <defs>
+                        <linearGradient id="elevGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#0d6efd;stop-opacity:0.4"/>
+                            <stop offset="100%" style="stop-color:#0d6efd;stop-opacity:0.05"/>
+                        </linearGradient>
+                    </defs>
+                    ${gridLines}
+                    <path d="M${margin},${chartH} L${pointsForArea} L${margin + chartW},${chartH} Z" fill="url(#elevGradient)"/>
+                    ${pathSegments}
+                    ${hoverCircles}
+                    <g id="elevation-tooltip" style="visibility: hidden;">
+                        <line class="elevation-tooltip-line" y1="8" y2="${chartH}"></line>
+                        <rect class="elevation-tooltip-rect" width="90" height="20" y="8"></rect>
+                        <text class="elevation-tooltip-text" y="22">0m / 0km</text>
+                    </g>
+                    <text x="2" y="${chartH}" font-size="11" fill="#6c757d">${Math.round(min)} m</text>
+                    <text x="2" y="16" font-size="11" fill="#6c757d">${Math.round(max)} m</text>
+                    <text x="${margin}" y="${h - 4}" font-size="11" text-anchor="middle">0 km</text>
+                    <text x="${margin + chartW}" y="${h - 4}" font-size="11" text-anchor="middle">${Math.round(totalDistanceKm)} km</text>
+                </svg>`;
+            
+            container.innerHTML = `<div style="margin-bottom: 4px;">Elevation Profile</div>${svgContent}`;
+
+            // --- 4. Setup Tooltip Interactivity ---
+            const tooltip = container.querySelector('#elevation-tooltip');
+            const tooltipLine = tooltip.querySelector('.elevation-tooltip-line');
+            const tooltipRect = tooltip.querySelector('.elevation-tooltip-rect');
+            const tooltipText = tooltip.querySelector('.elevation-tooltip-text');
+
+            setTimeout(() => {
+                container.querySelectorAll('.elev-hover').forEach(circle => {
+                    circle.addEventListener('mouseenter', (e) => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        const x = parseFloat(e.target.getAttribute('cx'));
+                        const elevation = Math.round(elevations[idx]);
+                        const distance = (idx / (n - 1)) * totalDistanceKm;
+                        
+                        showElevationHoverMarker(idx);
+
+                        tooltipLine.setAttribute('x1', x);
+                        tooltipLine.setAttribute('x2', x);
+                        tooltipText.setAttribute('x', x);
+                        tooltipRect.setAttribute('x', x - 45);
+                        tooltipText.textContent = `${elevation} m / ${distance.toFixed(1)} km`;
+                        tooltip.style.visibility = 'visible';
+                    });
                 });
-            });
-            container.addEventListener('mouseleave', () => {
-                removeElevationHoverMarker();
-                tooltip.style.visibility = 'hidden';
-            });
-        }, 0);
+                container.addEventListener('mouseleave', () => {
+                    removeElevationHoverMarker();
+                    tooltip.style.visibility = 'hidden';
+                });
+            }, 0);
+        }
+
+        // Start the drawing process
+        drawChart();
     }
     
     function showElevationHoverMarker(idx) {
