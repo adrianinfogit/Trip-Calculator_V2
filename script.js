@@ -173,6 +173,71 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Map & Routing ---
     const map = L.map('map').setView([51.1657, 10.4515], 5);
+    let mapClickPopup = null;
+
+    async function onMapClick(e) {
+        // Close any existing popup
+        if (mapClickPopup) {
+            map.closePopup(mapClickPopup);
+        }
+
+        // Show a loading indicator in a new popup
+        mapClickPopup = L.popup({ closeButton: true, className: 'map-click-popup' })
+            .setLatLng(e.latlng)
+            .setContent('Fetching address...')
+            .openOn(map);
+
+        try {
+            const { lat, lng } = e.latlng;
+            const address = await reverseGeocode(lng, lat);
+            // Only update the content if the popup is still the one we created.
+            // This prevents a race condition if the user clicks elsewhere quickly.
+            if (mapClickPopup && mapClickPopup.getLatLng().equals(e.latlng)) {
+                const popupContent = createPopupContent(address);
+                mapClickPopup.setContent(popupContent);
+            }
+        } catch (error) {
+            console.error("Reverse geocoding failed:", error);
+            if (mapClickPopup) {
+                mapClickPopup.setContent('Could not find address.');
+            }
+        }
+    }
+
+    function createPopupContent(address) {
+        const popupContent = document.createElement('div');
+        popupContent.innerHTML = `
+            <div class="fw-bold mb-2 small">${address}</div>
+            <div class="d-grid gap-2">
+                <button class="btn btn-sm btn-primary add-stop-from-map">Add as Stop</button>
+                <button class="btn btn-sm btn-secondary set-dest-from-map">Set as Destination</button>
+            </div>
+        `;
+        popupContent.querySelector('.add-stop-from-map').addEventListener('click', () => {
+            addStopRow(address);
+            map.closePopup();
+            calculateAndDisplayRoute();
+        });
+        popupContent.querySelector('.set-dest-from-map').addEventListener('click', () => {
+            const locationInputs = locationsContainer.querySelectorAll('.location-input');
+            if (locationInputs.length > 0) {
+                locationInputs[locationInputs.length - 1].value = address;
+                map.closePopup();
+                calculateAndDisplayRoute();
+            }
+        });
+        return popupContent;
+    }
+
+    async function reverseGeocode(lon, lat) {
+        const res = await fetch(`https://api.openrouteservice.org/geocode/reverse?api_key=${config.ORS_API_KEY}&point.lon=${lon}&point.lat=${lat}&layers=address,street,venue&size=1`);
+        const data = await res.json();
+        if (data.features && data.features.length > 0) {
+            return data.features[0].properties.label;
+        }
+        throw new Error('Address not found for coordinates.');
+    }
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
     let routeLayers = [], markers = [], poiLayer = L.layerGroup().addTo(map);
 
@@ -206,11 +271,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         
-        routeLayers.forEach(l => map.removeLayer(l));
-        routeLayers = [];
-        markers.forEach(m => map.removeLayer(m));
-        markers = [];
-        $('alternativeRoutesInfo').innerHTML = '';
         $('poiList').innerHTML = '';
         poiLayer.clearLayers();
         $('elevationProfile').innerHTML = '';
@@ -218,6 +278,11 @@ document.addEventListener('DOMContentLoaded', function () {
         $('elevationImpact').innerHTML = '';
         $('applyElevationBtn').style.display = 'none';
 
+        routeLayers.forEach(l => map.removeLayer(l));
+        routeLayers = [];
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        $('alternativeRoutesInfo').innerHTML = '';
         try {
             const geocodedResults = await Promise.all(validPlaces.map(geocode));
             const coords = geocodedResults.map(r => r.coords);
@@ -430,10 +495,10 @@ document.addEventListener('DOMContentLoaded', function () {
         setupAutocomplete(row.querySelector('.location-input'));
         return row;
     }
-
-    function addStopRow() {
+    
+    function addStopRow(address = '') {
         const allRows = locationsContainer.querySelectorAll('.location-row');
-        const newStop = createLocationRow('');
+        const newStop = createLocationRow(address);
         locationsContainer.insertBefore(newStop, allRows[allRows.length - 1]);
         updateLocationRoles();
     }
@@ -1380,6 +1445,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initializeLocations();
     initializeDates();
     setupHourlyForecastSlider();
+    map.on('click', onMapClick);
     bookingBtn.addEventListener('click', handleBookingRedirect);
     flightsBtn.addEventListener('click', handleFlightsRedirect);
 });
